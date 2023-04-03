@@ -1,5 +1,5 @@
 function grarficaTridimencional ();
-    fid = fopen('csvPrueba', 'r');
+    fid = fopen('csvPrueba3', 'r');
     A = fscanf(fid, '%f %d %d', [3 300]);
     fclose(fid);
 
@@ -17,16 +17,17 @@ function grarficaTridimencional ();
 
     tams = 1:15;
     for tam = 1: 15
-      tams(tam ) =  (A(2, (tam -1)*20 + 1) ) / (1024* 1024);
+      tams(tam ) =  (A(2, (tam -1)*20 + 1) )/ 1024;
     endfor
 
-    #tams = ["256MB", "128MB", "64MB", "32MB","16MB", "8MB", "4MB", "2MB" , "1MB", "512KB", "256KB", "128KB", "64KB", "32KB","16KB"]
+
 
 
     tams
 
     surf(saltos,tams,tiempos);
     set(gca,'yscale','log');
+    set(gca,'ytick',2.^[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17]);
 
 
 

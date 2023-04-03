@@ -99,7 +99,7 @@ int main(char argc, char * argv[]){
 		int j = 1;
 		for (stride = 1; stride <= MAXSTRIDE; stride++){
 			uint64_t ns=run(data, size, stride);
-			printf("thr(%d,%d)=%f; \% \t%d\t%d\t%llu\n",i,j, (double)(size/stride)/(double)ns, size, stride, ns);
+			printf("%f\t%d\t%d\n",(double)(size/stride)/(double)ns, size, stride);
 			j++;
 		}
 		i++;
