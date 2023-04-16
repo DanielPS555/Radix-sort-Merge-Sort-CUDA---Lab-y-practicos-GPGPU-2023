@@ -99,6 +99,22 @@ int mult_bikj(const VALT * __restrict__ A, const VALT * __restrict__ B, VALT * _
 					}
 }
 
+int Nmult_bikj(const VALT * __restrict__ A, const VALT * __restrict__ B, VALT * __restrict__ C, int m, int n, int p, int nb){
+
+    VALT a;
+
+    for (int row_bl = 0; row_bl < m; row_bl+=nb)
+        for (int it_bl = 0; it_bl < p; it_bl += nb)
+            for (int col_bl = 0; col_bl < n; col_bl += nb)
+                for (int row = row_bl; row < row_bl+nb; row++)
+                    for (int it = it_bl; it < it_bl+nb; it++){
+                        a=A[(row) * p + it];
+                        for (int col = col_bl; col < col_bl+nb; col++)
+                            C[(row) * n + col] += a * B[(it) * n + col];
+                    }
+
+}
+
 int mult_bijk(const VALT * __restrict__ A, const VALT * __restrict__ B, VALT * __restrict__ C, int m, int n, int p, int nb){
 
 	VALT sum;
@@ -118,7 +134,7 @@ int main(char argc, char * argv[]){
 
     // const char * fname;
 
-    if (argc == 4) {
+    if (argc == 5) {
 
 	    int m = atoi(argv[1]);
 	    int n = atoi(argv[2]);
@@ -135,26 +151,29 @@ int main(char argc, char * argv[]){
 	    init_vector(B, p*n, 1);
 	    init_vector(C, m*n, 0);
 
-	    MS( mult_ijk(A,B,C,m,n,p)    , t_mm_ijk  )
+	    /*MS( mult_ijk(A,B,C,m,n,p)    , t_mm_ijk  )
 	    MS( mult_jik(A,B,C,m,n,p)    , t_mm_jik  )
 	    MS( mult_ikj(A,B,C,m,n,p)    , t_mm_ikj  )
 	    MS( mult_kij(A,B,C,m,n,p)    , t_mm_kij  )
 	    MS( mult_jki(A,B,C,m,n,p)    , t_mm_jki  )
 	    MS( mult_kji(A,B,C,m,n,p)    , t_mm_kji  )
-	    MS( mult_bijk(A,B,C,m,n,p,nb), t_mm_bijk )
-	    MS( mult_bikj(A,B,C,m,n,p,nb), t_mm_bikj )
+		MS( mult_bijk(A,B,C,m,n,p,nb), t_mm_bijk )*/
+		MS( mult_bikj(A,B,C,m,n,p,nb), t_mm_bikj )
+	    //MS( Nmult_bikj(A,B,C,m,n,p,nb), t_mm_Nbikj )
+		
 
 	    printf("Lineales:\n");
-	    PRINT_RESULT("ijk: ", t_mm_ijk )
+	    /*PRINT_RESULT("ijk: ", t_mm_ijk )
 	    PRINT_RESULT("jik: ", t_mm_jik )
 	    PRINT_RESULT("ikj: ", t_mm_ikj )
 	    PRINT_RESULT("kij: ", t_mm_kij )
 	    PRINT_RESULT("jki: ", t_mm_jki )
-	    PRINT_RESULT("kji: ", t_mm_kji )
+	    PRINT_RESULT("kji: ", t_mm_kji )*/
 
 	    printf("Por bloques:\n");
-	    PRINT_RESULT("bijk:", t_mm_bijk )
+	    //PRINT_RESULT("bijk:", t_mm_bijk )
 	    PRINT_RESULT("bikj:", t_mm_bikj )
+	    //PRINT_RESULT("Nbikj:", t_mm_Nbikj )
 
     }else if (argc == 3) {
     	
@@ -204,3 +223,7 @@ int main(char argc, char * argv[]){
 
 	return 0;
 }
+
+//perf stat -e L1-dcache-loads,L1-dcache-load-misses,L1-dcache-stores ./matmul 32 32 32 8
+
+//perf stat -e LLC-loads,LLC-load-misses,LLC-stores,LLC-prefetches ./matmul 32 32 32 8

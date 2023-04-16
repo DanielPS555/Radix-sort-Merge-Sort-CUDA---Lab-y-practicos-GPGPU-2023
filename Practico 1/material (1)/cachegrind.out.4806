@@ -1,0 +1,238 @@
+desc: I1 cache:         32768 B, 64 B, 8-way associative
+desc: D1 cache:         49152 B, 64 B, 12-way associative
+desc: LL cache:         18874368 B, 64 B, 18-way associative
+cmd: ./malmul 1000 1000 1000 100
+events: Ir I1mr ILmr Dr D1mr DLmr Dw D1mw DLmw 
+fl=/home/dpadron/Documentos/GPGPU/PracticosGPGPU/Practico 1/material (1)/matmul.c
+fn=main
+13 15000017 1 1 5 2 1 3000000 375000 375000
+117 16 1 1 2 0 0 9 1 0
+121 2 0 0 0 0 0 0 0 0
+128 2 0 0 0 0 0 1 0 0
+130 8 0 0 0 0 0 2 0 0
+131 8 1 1 0 0 0 2 0 0
+132 8 1 1 0 0 0 2 0 0
+143 25 1 1 7 3 3 5 2 2
+148 2 1 1 0 0 0 1 0 0
+154 16 1 1 2 1 1 1 0 0
+156 3 1 1 0 0 0 1 0 0
+207 14 0 0 10 1 1 0 0 0
+fn=mult_jki
+63 3011 1 1 1000 0 0 1010 0 0
+66 7024 1 1 2000 1000 0 1 0 0
+67 3027000 4 4 1005000 1000 0 6000 999 0
+68 5501000 1 1 2497000 1000000 118060 0 0 0
+69 194379005 1 1 63376000 499999 0 2 0 0
+70 3000000039 11 11 1501000000 1002000000 191390 501000015 0 0
+73 8 0 0 7 1 1 0 0 0
+fl=/usr/include/stdlib.h
+fn=main
+364 20 3 3 4 0 0 5 2 0
+fl=???
+fn=(below main)
+0 82 6 6 21 1 0 17 0 0
+fn=???
+0 197995 1240 1221 46538 1563 1393 15226 466 445
+fn=_Exit
+0 6 1 1 1 0 0 0 0 0
+fn=_IO_default_xsputn
+0 205 4 4 55 0 0 16 0 0
+fn=_IO_do_write
+0 41 1 1 7 0 0 6 0 0
+fn=_IO_doallocbuf
+0 26 3 3 8 1 1 4 0 0
+fn=_IO_file_doallocate
+0 63 5 5 15 1 1 7 1 1
+fn=_IO_file_overflow
+0 464 6 6 121 0 0 73 0 0
+fn=_IO_file_setbuf
+0 14 1 1 3 0 0 5 0 0
+fn=_IO_file_stat
+0 3 1 1 1 0 0 0 0 0
+fn=_IO_file_sync
+0 18 3 3 7 0 0 3 0 0
+fn=_IO_file_write
+0 111 3 3 24 0 0 15 1 1
+fn=_IO_file_xsputn
+0 253 9 8 53 3 3 25 0 0
+fn=_IO_setb
+0 28 1 1 7 0 0 7 0 0
+fn=__acos_finite
+0 8 1 1 4 0 0 0 0 0
+fn=__asin_finite
+0 8 1 1 4 0 0 0 0 0
+fn=__atan2_finite
+0 9 2 2 4 0 0 0 0 0
+fn=__call_tls_dtors
+0 12 2 2 5 0 0 2 0 0
+fn=__ctype_init
+0 17 2 2 10 3 0 3 0 0
+fn=__cxa_atexit
+0 3 1 1 0 0 0 0 0 0
+fn=__cxa_finalize
+0 174 6 6 48 1 1 21 0 0
+fn=__default_morecore
+0 18 2 2 4 0 0 2 0 0
+fn=__exp_finite
+0 9 2 2 4 0 0 0 0 0
+fn=__libc_alloca_cutoff
+0 22 2 2 4 1 1 0 0 0
+fn=__libc_early_init
+0 51 4 4 10 1 0 11 4 4
+fn=__log_finite
+0 9 2 2 4 0 0 0 0 0
+fn=__overflow
+0 36 2 2 8 0 0 2 0 0
+fn=__pow_finite
+0 8 2 2 4 0 0 0 0 0
+fn=__sigsetjmp
+0 22 3 3 5 1 0 8 0 0
+fn=__tunable_get_val
+0 677 3 3 132 34 15 33 1 1
+fn=_dl_allocate_tls_init
+0 101 7 7 30 4 0 17 0 0
+fn=_dl_audit_preinit
+0 5 1 1 2 0 0 0 0 0
+fn=_dl_catch_exception
+0 246 4 4 60 0 0 78 4 4
+fn=_dl_debug_state
+0 4 2 1 2 0 0 0 0 0
+fn=_setjmp
+0 3 1 1 0 0 0 0 0 0
+fn=bcmp
+0 27 3 3 5 0 0 0 0 0
+fn=brk
+0 18 1 1 4 0 0 2 0 0
+fn=clock_gettime
+0 22 2 2 6 4 4 0 0 0
+fn=cos
+0 9 1 1 4 0 0 0 0 0
+fn=cosf
+0 9 1 1 4 0 0 0 0 0
+fn=exit
+0 8 1 1 1 0 0 2 0 0
+fn=exp2f
+0 9 1 1 4 0 0 0 0 0
+fn=expf
+0 9 1 1 4 0 0 0 0 0
+fn=fma
+0 6 2 2 3 0 0 0 0 0
+fn=fstat
+0 7 1 1 0 0 0 0 0 0
+fn=fstatat
+0 8 1 1 1 0 0 0 0 0
+fn=getrlimit
+0 10 1 1 1 0 0 0 0 0
+fn=index
+0 22 2 2 4 0 0 0 0 0
+fn=log2f
+0 9 2 2 4 0 0 0 0 0
+fn=logf
+0 9 1 1 4 0 0 0 0 0
+fn=malloc
+0 52 6 6 14 3 3 5 0 0
+fn=memalign
+0 19 2 2 5 1 1 3 0 0
+fn=memchr
+0 25 2 2 4 0 0 0 0 0
+fn=memcpy
+0 24 4 4 4 0 0 0 0 0
+fn=memmove
+0 24 4 4 4 0 0 0 0 0
+fn=mempcpy
+0 24 3 3 4 0 0 0 0 0
+fn=memrchr
+0 28 3 3 5 0 0 0 0 0
+fn=memset
+0 26 2 2 4 0 0 0 0 0
+fn=mmap
+0 27 1 1 3 0 0 0 0 0
+fn=powf
+0 9 2 2 4 0 0 0 0 0
+fn=printf
+0 38 4 4 6 0 0 19 0 0
+fn=pthread_mutex_lock
+0 42 6 6 12 1 1 4 0 0
+fn=pthread_mutex_unlock
+0 3 1 1 0 0 0 0 0 0
+fn=puts
+0 143 8 8 46 8 8 25 0 0
+fn=rawmemchr
+0 25 3 3 4 0 0 0 0 0
+fn=rindex
+0 28 2 2 5 0 0 0 0 0
+fn=sbrk
+0 48 3 3 15 3 3 8 0 0
+fn=sin
+0 9 2 2 4 0 0 0 0 0
+fn=sincos
+0 8 2 2 4 0 0 0 0 0
+fn=sincosf
+0 9 2 2 4 0 0 0 0 0
+fn=sinf
+0 9 2 2 4 0 0 0 0 0
+fn=srand
+0 16 2 2 5 0 0 2 0 0
+fn=srandom_r
+0 6182 5 5 1865 1 0 652 1 1
+fn=stpcpy
+0 20 2 2 4 0 0 0 0 0
+fn=stpncpy
+0 22 2 2 4 0 0 0 0 0
+fn=strcasecmp
+0 24 2 2 4 0 0 0 0 0
+fn=strcasecmp_l
+0 24 3 3 4 0 0 0 0 0
+fn=strcat
+0 20 2 2 4 0 0 0 0 0
+fn=strchrnul
+0 28 2 2 5 1 0 0 0 0
+fn=strcmp
+0 22 3 3 4 0 0 0 0 0
+fn=strcpy
+0 20 2 2 4 0 0 0 0 0
+fn=strcspn
+0 7 1 1 3 0 0 0 0 0
+fn=strlen
+0 56 3 3 10 0 0 0 0 0
+fn=strncasecmp
+0 24 3 3 4 1 0 0 0 0
+fn=strncasecmp_l
+0 24 2 2 4 0 0 0 0 0
+fn=strncmp
+0 24 3 3 4 0 0 0 0 0
+fn=strncpy
+0 22 2 2 4 0 0 0 0 0
+fn=strnlen
+0 56 3 3 10 0 0 0 0 0
+fn=strpbrk
+0 7 1 1 3 0 0 0 0 0
+fn=strspn
+0 7 1 1 3 0 0 0 0 0
+fn=strtol
+0 20 1 1 8 0 0 0 0 0
+fn=wcpncpy
+0 21 3 3 4 0 0 0 0 0
+fn=wcscat
+0 21 3 3 4 0 0 0 0 0
+fn=wcschr
+0 56 2 2 10 0 0 0 0 0
+fn=wcscmp
+0 28 2 2 5 0 0 0 0 0
+fn=wcscpy
+0 19 2 2 4 0 0 0 0 0
+fn=wcslen
+0 22 3 3 4 0 0 0 0 0
+fn=wcsncpy
+0 21 3 3 4 0 0 0 0 0
+fn=wcsnlen
+0 22 3 3 4 0 0 0 0 0
+fn=wmemchr
+0 50 2 2 8 0 0 0 0 0
+fn=wmemcmp
+0 27 3 3 5 0 0 0 0 0
+fn=wmemset
+0 20 2 2 8 0 0 0 0 0
+fn=write
+0 24 1 1 6 0 0 0 0 0
+summary: 3218125737 1525 1504 1567930468 1003503644 310892 504023360 376482 375459

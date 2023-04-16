@@ -1,5 +1,5 @@
 function grarficaTridimencional ();
-    fid = fopen('csvPrueba3', 'r');
+    fid = fopen('csvPrueba2', 'r');
     A = fscanf(fid, '%f %d %d', [3 300]);
     fclose(fid);
 
@@ -25,15 +25,9 @@ function grarficaTridimencional ();
 
     tams
 
-    #surf(saltos,tams,tiempos);
-    #set(gca,'yscale','log');
-    #set(gca,'ytick',2.^[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17]);
-
-    ejex = 1:20
-
-
-    plot(ejex, tiempos(15,:))
-    set(gca,'xtick',[1:20]);
+    surf(saltos,tams,tiempos);
+    set(gca,'yscale','log');
+    set(gca,'ytick',2.^[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17]);
 
 
 
