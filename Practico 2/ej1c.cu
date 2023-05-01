@@ -78,10 +78,7 @@ int main(int argc, char *argv[])
 
 	int lenghtPorThread = ceil((float)length / (N * CANT_BLOCK));
 	decrypt_kernel<<<gridSize, blockSize>>>(d_message, lenghtPorThread, length);
-	CUDA_CHK( cudaGetLastError() )
-	
-	/*Tomo el tiempo final*/
-	CUDA_CHK(cudaDeviceSynchronize())
+	CUDA_CHK( cudaGetLastError() );
 
 	/* Copiar los datos de salida a la CPU en h_message */
 	CUDA_CHK(cudaMemcpy(h_message, d_message, size, cudaMemcpyDeviceToHost));

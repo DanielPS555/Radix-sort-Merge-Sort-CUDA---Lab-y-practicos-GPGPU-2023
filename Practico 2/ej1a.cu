@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include "cuda.h"
 #include "math.h"
-#include <time.h>
 
 
 #define CUDA_CHK(ans) { gpuAssert((ans), __FILE__, __LINE__); }
@@ -40,9 +39,6 @@ __global__ void decrypt_kernel(int *d_message, int length)
 
 int main(int argc, char *argv[])
 {
-	clock_t t;
-	
-
 	int *h_message;
 	int *d_message;
 	unsigned int size;
@@ -73,23 +69,11 @@ int main(int argc, char *argv[])
 	dim3 gridSize(1, 1);
 	dim3 blockSize(N, 1, 1);
 
-	/* Tomo el tiempo inicial */
-	t = clock();
-
-
 	decrypt_kernel<<<gridSize, blockSize>>>(d_message, length);
 	CUDA_CHK( cudaGetLastError() )
-	
-	/*Tomo el tiempo final*/
-	CUDA_CHK(cudaDeviceSynchronize())
-	t = clock() - t;
 
 	/* Copiar los datos de salida a la CPU en h_message */
 	CUDA_CHK(cudaMemcpy(h_message, d_message, size, cudaMemcpyDeviceToHost));
-
-	double time_taken = ((double)t)/(CLOCKS_PER_SEC/1000.0);
-
-	printf("Tiempo de ejecucion: %.2f ms\n Ticks %d\n", time_taken, t);
 	
 	// despliego el mensaje
 	for (int i = 0; i < length; i++) {
