@@ -1,0 +1,6 @@
+nvcc -arch=sm_60 -Xptxas -dlcm=cg main.cpp blur.cu -o blur -O3 -L/usr/X11R6/lib -lm -lpthread -lX11
+El tiempo de ejecucion de ajuste_brillo_cpu es 48.8750 ms
+Tiempo de ejecucion ajuste_brillo_coalesced: 0.1646 ms
+Tiempo de ejecucion ajuste_brillo_no_coalesced: 0.1008 ms
+Tiempo de ejecucion ejecutar_ej1b_div: 0.0921 ms
+Tiempo de ejecucion ejecutar_ej1b_no_div: 0.1172 ms

@@ -46,14 +46,90 @@ __global__ void ajustar_brillo_coalesced_kernel(float* o_img, float* d_img, int 
 
 }
 
-// __global__ void ajustar_brillo_no_coalesced_kernel(float* d_img, int width, int height, float coef){
+__global__ void ajustar_brillo_no_coalesced_kernel(float* o_img, float* d_img, int width, int height, float coef){
+    // Trasponemos las ubicaciones de forma tal que un mismo wap leean 32 filas diferentes
+    int pos_y = blockIdx.x * blockDim.x + threadIdx.x;
+    int pos_x = blockIdx.y * blockDim.y + threadIdx.y;
 
-// }
+    int pos = pos_x + pos_y * width;
 
+    if (pos_x < width && pos_y < height)
+        d_img[pos] = min(255.0f,max(0.0f,o_img[pos]+coef));
 
-// void blur_gpu(float * img_in, int width, int height, float * img_out, float msk[], int m_size){
+}
+
+// Ej1b - 1
+__global__ void ej1b_no_div_kernel(float* o_img, float* d_img, int width, int height, float coef){
     
-// }
+    int pos_x = blockIdx.x * blockDim.x + threadIdx.x;
+    int pos_y = blockIdx.y * blockDim.y + threadIdx.y;
+
+    int pos = pos_x + pos_y * width;
+    
+    int factor = 1 - 2 * (pos_x % 2);
+
+    if (pos_x < width && pos_y < height){}
+        d_img[pos] = min(255.0f,max(0.0f,o_img[pos]+coef * factor));
+
+}
+
+// Ej1b - 2
+__global__ void ej1b_div_kernel(float* o_img, float* d_img, int width, int height, float coef){
+    
+    int pos_x = blockIdx.x * blockDim.x + threadIdx.x;
+    int pos_y = blockIdx.y * blockDim.y + threadIdx.y;
+
+    int pos = pos_x + pos_y * width;
+
+    int factor = 1 - 2 * (pos_x % 2);
+
+    if (pos_x < width && pos_y < height)
+        if (factor == 1)
+            d_img[pos] = min(255.0f,max(0.0f,o_img[pos] + coef));
+        else 
+            d_img[pos] = min(255.0f,max(0.0f,o_img[pos] - coef));
+}
+
+// Ej2 - 1
+__global__ void blur_gpu(float * img_in, int width, int height, float * img_out, int m_size){
+    int pos_x = blockIdx.x * blockDim.x + threadIdx.x;
+    int pos_y = blockIdx.y * blockDim.y + threadIdx.y;
+
+    int inicioVertical = max(0, pos_y - m_size);
+    int finVertical = min(height, pos_y + m_size);
+    int inicioHorizontal = max(0, pos_x - m_size);
+    int finHorizontal = min(width, pos_x + m_size);
+    
+    int tam = (finVertical - inicioVertical + 1) * (finHorizontal - inicioHorizontal + 1);
+    double acumulador = 0;
+    for (int fila = inicioVertical; fila <= finVertical; fila++)
+        for (int columna = inicioHorizontal; columna <= finHorizontal; columna++)
+            acumulador += img_in[fila*width + columna];
+    img_out[pos_y*width + pos_x] = acumulador/tam;
+}
+
+// Ej2 - 2
+void blur_cpu(float * img_in, int width, int height, float * img_out, int m_size){
+    for (int pos_x= 0; pos_x < width; pos_x++){
+        for (int pos_y= 0; pos_y < height; pos_y++){
+            int inicioVertical = max(0, pos_y - m_size);
+            int finVertical = min(height - 1, pos_y + m_size);
+            int inicioHorizontal = max(0, pos_x - m_size);
+            int finHorizontal = min(width - 1, pos_x + m_size);
+            
+            int tam = (finVertical - inicioVertical + 1) * (finHorizontal - inicioHorizontal + 1);
+            double acumulador = 0;
+
+            for (int fila = inicioVertical; fila <= finVertical; fila++)
+                for (int columna = inicioHorizontal; columna <= finHorizontal; columna++)
+                    acumulador += img_in[fila*width + columna];
+
+            img_out[pos_y*width + pos_x] = acumulador/tam;
+        }    
+    }
+
+   
+}
 
 void ajustar_brillo_cpu(float * img_in, int width, int height, float * img_out, float coef){
 
@@ -66,8 +142,8 @@ void ajustar_brillo_cpu(float * img_in, int width, int height, float * img_out, 
 }
 
 
-void ejecutar_kernel_ajuste_brillo_coalesced_y_tomar_tiempo(dim3 gridSize, dim3 bloakSize, float *img_gpu, float *img_gpu_out, int width, int heigth, float coeficiente){
-    ajustar_brillo_coalesced_kernel<<<gridSize,bloakSize >>>(img_gpu, img_gpu_out, width, heigth, coeficiente );
+void ejecutar_kernel_ajuste_brillo_coalesced_y_tomar_tiempo(dim3 gridSize, dim3 blockSize, float *img_gpu, float *img_gpu_out, int width, int heigth, float coeficiente){
+    ajustar_brillo_coalesced_kernel<<<gridSize,blockSize >>>(img_gpu, img_gpu_out, width, heigth, coeficiente );
     CUDA_CHK( cudaGetLastError() );
 
     CUDA_CHK(cudaDeviceSynchronize())
@@ -75,10 +151,44 @@ void ejecutar_kernel_ajuste_brillo_coalesced_y_tomar_tiempo(dim3 gridSize, dim3 
 
 }
 
+void ejecutar_kernel_ajuste_brillo_no_coalesced_y_tomar_tiempo(dim3 gridSize, dim3 blockSize, float *img_gpu, float *img_gpu_out, int width, int heigth, float coeficiente){
+    ej1b_div_kernel<<<gridSize,blockSize >>>(img_gpu, img_gpu_out, width, heigth, coeficiente );
+    CUDA_CHK( cudaGetLastError() );
+
+    CUDA_CHK(cudaDeviceSynchronize())
+
+
+}
+
+void ejecutar_ej1b_no_div(dim3 gridSize, dim3 blockSize, float *img_gpu, float *img_gpu_out, int width, int heigth, float coeficiente){
+    ej1b_no_div_kernel<<<gridSize,blockSize >>>(img_gpu, img_gpu_out, width, heigth, coeficiente );
+    CUDA_CHK( cudaGetLastError() );
+
+    CUDA_CHK(cudaDeviceSynchronize())
+
+}
+
+void ejecutar_ej1b_div(dim3 gridSize, dim3 blockSize, float *img_gpu, float *img_gpu_out, int width, int heigth, float coeficiente){
+    ej1b_div_kernel<<<gridSize,blockSize >>>(img_gpu, img_gpu_out, width, heigth, coeficiente );
+    CUDA_CHK( cudaGetLastError() );
+
+    CUDA_CHK(cudaDeviceSynchronize())
+
+}
+
+void ejecutar_ej2_gpu(dim3 gridSize, dim3 blockSize, float *img_gpu, float *img_gpu_out, int width, int heigth, int k){
+    blur_gpu<<<gridSize,blockSize >>>(img_gpu, width, heigth, img_gpu_out, k);
+    CUDA_CHK( cudaGetLastError() );
+
+    CUDA_CHK(cudaDeviceSynchronize())
+
+}
+
+
 void main_ajuste_brillo_cpu(float * img_in, int width, int height, float * img_out, float coef){
     MS(ajustar_brillo_cpu(img_in, width, height, img_out, coef), time);
 
-    printf("El tiempo de ejecucion de ajuste_brillo_cpu es %.4f ms", time);
+    printf("El tiempo de ejecucion de ajuste_brillo_cpu es %.4f ms\n", time);
 }
 
 
@@ -95,13 +205,12 @@ void main_ajuste_brillo_coalesced(float *img_cpu, float *img_cpu_out, int width,
     CUDA_CHK ( cudaMemcpy(img_gpu_out, img_cpu_out, size, cudaMemcpyHostToDevice) );
 
 
-    printf("Tam= %d ; %d ; %.2f ; %.2f \n" , width, heigth,  ((float)width)/32 ,  ((float)heigth)/16 );
-    dim3 gridSize( (int)((float)width)/32, (int)((float)heigth)/16 );
+    dim3 gridSize( (int)((float)width)/32, (int)((float)heigth)/16 ); //ToDo Aca hay que ajustar bien los numeros
     dim3 blockSize(32, 16);
 
 	MS(ejecutar_kernel_ajuste_brillo_coalesced_y_tomar_tiempo(gridSize, blockSize, img_gpu, img_gpu_out, width, heigth, coeficiente), time);
 
-	printf("Tiempo de ejecucion ajuste_brillo_coalesced: %.4f ", time);
+	printf("Tiempo de ejecucion ajuste_brillo_coalesced: %.4f ms\n", time);
 
     CUDA_CHK(cudaMemcpy(img_cpu_out, img_gpu_out, size, cudaMemcpyDeviceToHost));
 
@@ -110,6 +219,115 @@ void main_ajuste_brillo_coalesced(float *img_cpu, float *img_cpu_out, int width,
 
 }
 
+void main_ajuste_brillo_no_coalesced(float *img_cpu, float *img_cpu_out, int width, int heigth, float coeficiente){
+
+    float * img_gpu = NULL;
+    float * img_gpu_out = NULL;
+
+    size_t size = width * heigth * sizeof(float);
+    CUDA_CHK ( cudaMalloc((void**)& img_gpu, size) );
+    CUDA_CHK ( cudaMalloc((void**)& img_gpu_out, size) );
+
+    CUDA_CHK ( cudaMemcpy(img_gpu, img_cpu, size, cudaMemcpyHostToDevice) );
+    CUDA_CHK ( cudaMemcpy(img_gpu_out, img_cpu_out, size, cudaMemcpyHostToDevice) );
+
+    dim3 gridSize((int)((float)heigth)/16 , (int)((float)width)/32 ); 
+    dim3 blockSize(16, 32);
+
+	MS(ejecutar_kernel_ajuste_brillo_no_coalesced_y_tomar_tiempo(gridSize, blockSize, img_gpu, img_gpu_out, width, heigth, coeficiente), time);
+
+	printf("Tiempo de ejecucion ajuste_brillo_no_coalesced: %.4f ms\n", time);
+
+    CUDA_CHK(cudaMemcpy(img_cpu_out, img_gpu_out, size, cudaMemcpyDeviceToHost));
+
+    CUDA_CHK(cudaFree(img_gpu));
+    CUDA_CHK(cudaFree(img_gpu_out));
+
+}
+
+void main_efecto_par_impar_divergente(float *img_cpu, float *img_cpu_out, int width, int heigth, float coeficiente){
+
+    float * img_gpu = NULL;
+    float * img_gpu_out = NULL;
+
+    size_t size = width * heigth * sizeof(float);
+    CUDA_CHK ( cudaMalloc((void**)& img_gpu, size) );
+    CUDA_CHK ( cudaMalloc((void**)& img_gpu_out, size) );
+
+    CUDA_CHK ( cudaMemcpy(img_gpu, img_cpu, size, cudaMemcpyHostToDevice) );
+    CUDA_CHK ( cudaMemcpy(img_gpu_out, img_cpu_out, size, cudaMemcpyHostToDevice) );
+
+    dim3 gridSize( (int)((float)width)/32, (int)((float)heigth)/16 ); //ToDo Aca hay que ajustar bien los numeros
+    dim3 blockSize(32, 16);
+
+	MS(ejecutar_ej1b_div(gridSize, blockSize, img_gpu, img_gpu_out, width, heigth, coeficiente), time);
+
+	printf("Tiempo de ejecucion ejecutar_ej1b_div: %.4f ms\n", time);
+
+    CUDA_CHK(cudaMemcpy(img_cpu_out, img_gpu_out, size, cudaMemcpyDeviceToHost));
+
+    CUDA_CHK(cudaFree(img_gpu));
+    CUDA_CHK(cudaFree(img_gpu_out));
+
+}
+
+void main_efecto_par_impar_no_divergente(float *img_cpu, float *img_cpu_out, int width, int heigth, float coeficiente){
+
+    float * img_gpu = NULL;
+    float * img_gpu_out = NULL;
+
+    size_t size = width * heigth * sizeof(float);
+    CUDA_CHK ( cudaMalloc((void**)& img_gpu, size) );
+    CUDA_CHK ( cudaMalloc((void**)& img_gpu_out, size) );
+
+    CUDA_CHK ( cudaMemcpy(img_gpu, img_cpu, size, cudaMemcpyHostToDevice) );
+    CUDA_CHK ( cudaMemcpy(img_gpu_out, img_cpu_out, size, cudaMemcpyHostToDevice) );
+
+    dim3 gridSize( (int)((float)width)/32, (int)((float)heigth)/16 ); //ToDo Aca hay que ajustar bien los numeros
+    dim3 blockSize(32, 16);
+
+	MS(ejecutar_ej1b_no_div(gridSize, blockSize, img_gpu, img_gpu_out, width, heigth, coeficiente), time);
+
+	printf("Tiempo de ejecucion ejecutar_ej1b_no_div: %.4f ms\n", time);
+
+    CUDA_CHK(cudaMemcpy(img_cpu_out, img_gpu_out, size, cudaMemcpyDeviceToHost));
+
+    CUDA_CHK(cudaFree(img_gpu));
+    CUDA_CHK(cudaFree(img_gpu_out));
+
+}
+
+void main_blur_gpu(float *img_cpu, float *img_cpu_out, int width, int heigth, int k){
+
+    float * img_gpu = NULL;
+    float * img_gpu_out = NULL;
+
+    size_t size = width * heigth * sizeof(float);
+    CUDA_CHK ( cudaMalloc((void**)& img_gpu, size) );
+    CUDA_CHK ( cudaMalloc((void**)& img_gpu_out, size) );
+
+    CUDA_CHK ( cudaMemcpy(img_gpu, img_cpu, size, cudaMemcpyHostToDevice) );
+    CUDA_CHK ( cudaMemcpy(img_gpu_out, img_cpu_out, size, cudaMemcpyHostToDevice) );
+
+    dim3 gridSize( (int)((float)width)/32, (int)((float)heigth)/16 ); //ToDo Aca hay que ajustar bien los numeros
+    dim3 blockSize(32, 16);
+
+	MS(ejecutar_ej2_gpu(gridSize, blockSize, img_gpu, img_gpu_out, width, heigth, k), time);
+
+	printf("Tiempo de ejecucion ejecutar_blur_gpu: %.4f ms\n", time);
+
+    CUDA_CHK(cudaMemcpy(img_cpu_out, img_gpu_out, size, cudaMemcpyDeviceToHost));
+
+    CUDA_CHK(cudaFree(img_gpu));
+    CUDA_CHK(cudaFree(img_gpu_out));
+
+}
+
+void main_blur_cpu(float *img_cpu, float *img_cpu_out, int width, int heigth, int k){
+    MS(blur_cpu(img_cpu, width, heigth, img_cpu_out, k), time);
+
+    printf("El tiempo de ejecucion de blur_cpu es %.4f ms\n", time);
+}
 
 
 

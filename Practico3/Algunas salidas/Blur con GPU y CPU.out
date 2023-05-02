@@ -1,0 +1,3 @@
+nvcc -arch=sm_60 -Xptxas -dlcm=cg main.cpp blur.cu -o blur -O3 -L/usr/X11R6/lib -lm -lpthread -lX11
+Tiempo de ejecucion ejecutar_blur_gpu: 2.6232 ms
+El tiempo de ejecucion de blur_cpu es 823.6554 ms

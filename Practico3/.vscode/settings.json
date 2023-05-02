@@ -3,6 +3,12 @@
         "array": "cpp",
         "hash_map": "cpp",
         "string_view": "cpp",
-        "initializer_list": "cpp"
+        "initializer_list": "cpp",
+        "chrono": "cpp",
+        "random": "cpp",
+        "limits": "cpp",
+        "semaphore": "cpp",
+        "algorithm": "cpp",
+        "cstdlib": "cpp"
     }
 }
