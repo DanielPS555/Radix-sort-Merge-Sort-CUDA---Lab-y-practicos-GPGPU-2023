@@ -28,7 +28,7 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
             elap = 1000 * (t_fin.tv_sec - t_ini.tv_sec) + (t_fin.tv_nsec - t_ini.tv_nsec)/1000000.0;         \
         }
 
-
+#define PRINT_CSV(name, width, height, time) printf("%s,%dx%d,%.4f\n", name, width, height, time);
 
 // __global__ void blur_kernel(float* d_input, float* d_output, float* d_msk, int width, int height){
 
@@ -65,11 +65,11 @@ __global__ void ej1b_no_div_kernel(float* o_img, float* d_img, int width, int he
     int pos_y = blockIdx.y * blockDim.y + threadIdx.y;
 
     int pos = pos_x + pos_y * width;
-    
-    int factor = 1 - 2 * (pos_x % 2);
 
-    if (pos_x < width && pos_y < height){}
-        d_img[pos] = min(255.0f,max(0.0f,o_img[pos]+coef * factor));
+    int factor = 1 - 2 * (pos_x & 1);
+
+    //if (pos_x < width && pos_y < height){}
+    d_img[pos] = min(255.0f,max(0.0f,o_img[pos]+coef * factor));
 
 }
 
@@ -81,13 +81,15 @@ __global__ void ej1b_div_kernel(float* o_img, float* d_img, int width, int heigh
 
     int pos = pos_x + pos_y * width;
 
-    int factor = 1 - 2 * (pos_x % 2);
+    int factor = 1 - 2 * (pos_x & 1);
 
-    if (pos_x < width && pos_y < height)
-        if (factor == 1)
-            d_img[pos] = min(255.0f,max(0.0f,o_img[pos] + coef));
-        else 
-            d_img[pos] = min(255.0f,max(0.0f,o_img[pos] - coef));
+    if (pos_x < width && pos_y < height) {
+        if (factor == 1) {
+            d_img[pos] = min(255.0f, max(0.0f, o_img[pos] + coef));
+        } else {
+            d_img[pos] = min(255.0f, max(0.0f, o_img[pos] - coef));
+        }
+    }
 }
 
 // Ej2 - 1
@@ -152,7 +154,7 @@ void ejecutar_kernel_ajuste_brillo_coalesced_y_tomar_tiempo(dim3 gridSize, dim3 
 }
 
 void ejecutar_kernel_ajuste_brillo_no_coalesced_y_tomar_tiempo(dim3 gridSize, dim3 blockSize, float *img_gpu, float *img_gpu_out, int width, int heigth, float coeficiente){
-    ej1b_div_kernel<<<gridSize,blockSize >>>(img_gpu, img_gpu_out, width, heigth, coeficiente );
+    ajustar_brillo_no_coalesced_kernel<<<gridSize,blockSize >>>(img_gpu, img_gpu_out, width, heigth, coeficiente );
     CUDA_CHK( cudaGetLastError() );
 
     CUDA_CHK(cudaDeviceSynchronize())
@@ -188,7 +190,7 @@ void ejecutar_ej2_gpu(dim3 gridSize, dim3 blockSize, float *img_gpu, float *img_
 void main_ajuste_brillo_cpu(float * img_in, int width, int height, float * img_out, float coef){
     MS(ajustar_brillo_cpu(img_in, width, height, img_out, coef), time);
 
-    printf("El tiempo de ejecucion de ajuste_brillo_cpu es %.4f ms\n", time);
+    PRINT_CSV("ajuste_brillo_cpu", width, height, time);
 }
 
 
@@ -210,7 +212,7 @@ void main_ajuste_brillo_coalesced(float *img_cpu, float *img_cpu_out, int width,
 
 	MS(ejecutar_kernel_ajuste_brillo_coalesced_y_tomar_tiempo(gridSize, blockSize, img_gpu, img_gpu_out, width, heigth, coeficiente), time);
 
-	printf("Tiempo de ejecucion ajuste_brillo_coalesced: %.4f ms\n", time);
+    PRINT_CSV("ajuste_brillo_coalesced", width, heigth, time)
 
     CUDA_CHK(cudaMemcpy(img_cpu_out, img_gpu_out, size, cudaMemcpyDeviceToHost));
 
@@ -236,7 +238,7 @@ void main_ajuste_brillo_no_coalesced(float *img_cpu, float *img_cpu_out, int wid
 
 	MS(ejecutar_kernel_ajuste_brillo_no_coalesced_y_tomar_tiempo(gridSize, blockSize, img_gpu, img_gpu_out, width, heigth, coeficiente), time);
 
-	printf("Tiempo de ejecucion ajuste_brillo_no_coalesced: %.4f ms\n", time);
+    PRINT_CSV("ajuste_brillo_no_coalesced", width, heigth, time)
 
     CUDA_CHK(cudaMemcpy(img_cpu_out, img_gpu_out, size, cudaMemcpyDeviceToHost));
 
@@ -262,7 +264,7 @@ void main_efecto_par_impar_divergente(float *img_cpu, float *img_cpu_out, int wi
 
 	MS(ejecutar_ej1b_div(gridSize, blockSize, img_gpu, img_gpu_out, width, heigth, coeficiente), time);
 
-	printf("Tiempo de ejecucion ejecutar_ej1b_div: %.4f ms\n", time);
+    PRINT_CSV("efecto_par_impar_divergente", width, heigth, time)
 
     CUDA_CHK(cudaMemcpy(img_cpu_out, img_gpu_out, size, cudaMemcpyDeviceToHost));
 
@@ -288,7 +290,7 @@ void main_efecto_par_impar_no_divergente(float *img_cpu, float *img_cpu_out, int
 
 	MS(ejecutar_ej1b_no_div(gridSize, blockSize, img_gpu, img_gpu_out, width, heigth, coeficiente), time);
 
-	printf("Tiempo de ejecucion ejecutar_ej1b_no_div: %.4f ms\n", time);
+    PRINT_CSV("efecto_par_impar_no_divergente", width, heigth, time)
 
     CUDA_CHK(cudaMemcpy(img_cpu_out, img_gpu_out, size, cudaMemcpyDeviceToHost));
 
@@ -312,9 +314,7 @@ void main_blur_gpu(float *img_cpu, float *img_cpu_out, int width, int heigth, in
     dim3 gridSize( (int)((float)width)/32, (int)((float)heigth)/16 ); //ToDo Aca hay que ajustar bien los numeros
     dim3 blockSize(32, 16);
 
-	MS(ejecutar_ej2_gpu(gridSize, blockSize, img_gpu, img_gpu_out, width, heigth, k), time);
-
-	printf("Tiempo de ejecucion ejecutar_blur_gpu: %.4f ms\n", time);
+	ejecutar_ej2_gpu(gridSize, blockSize, img_gpu, img_gpu_out, width, heigth, k);
 
     CUDA_CHK(cudaMemcpy(img_cpu_out, img_gpu_out, size, cudaMemcpyDeviceToHost));
 
@@ -326,7 +326,7 @@ void main_blur_gpu(float *img_cpu, float *img_cpu_out, int width, int heigth, in
 void main_blur_cpu(float *img_cpu, float *img_cpu_out, int width, int heigth, int k){
     MS(blur_cpu(img_cpu, width, heigth, img_cpu_out, k), time);
 
-    printf("El tiempo de ejecucion de blur_cpu es %.4f ms\n", time);
+    PRINT_CSV("blur_cpu", width, heigth, time)
 }
 
 
