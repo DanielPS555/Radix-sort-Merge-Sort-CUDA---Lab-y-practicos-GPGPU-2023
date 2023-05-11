@@ -89,7 +89,7 @@ int main(int argc, char** argv){
 
         MS(main_blur_gpu(img_cpu_matrix, img_cpu_out_matrix, image.width(), image.height(), 10), time);
 
-        PRINT_CSV("blur_gpu", width, heigth, time)
+        PRINT_CSV("blur_gpu", image.width(), image.height(), time)
     }
     if (algorithm == -1 || algorithm == MAIN_BLUR_CPU) {
         main_blur_cpu(img_cpu_matrix, img_cpu_out_matrix, image.width(), image.height(), 10);

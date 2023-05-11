@@ -66,10 +66,13 @@ __global__ void ej1b_no_div_kernel(float* o_img, float* d_img, int width, int he
 
     int pos = pos_x + pos_y * width;
 
-    int factor = 1 - 2 * (pos_x & 1);
+    int par = pos_x & 1;
 
-    //if (pos_x < width && pos_y < height){}
-    d_img[pos] = min(255.0f,max(0.0f,o_img[pos]+coef * factor));
+    // Asumo tamaño de imagen multiplo de 64
+    // pos_x = 2 * pos_x - 63 * par; // (pos_x - 32 * par) * 2 + par -> Equivale al if y else de la version div
+
+    float value = sin(o_img[pos]) * par + cos(o_img[pos]) * (1 - par);
+    d_img[pos] = min(255.0f,max(0.0f,value * 255.f));
 
 }
 
@@ -81,13 +84,16 @@ __global__ void ej1b_div_kernel(float* o_img, float* d_img, int width, int heigh
 
     int pos = pos_x + pos_y * width;
 
-    int factor = 1 - 2 * (pos_x & 1);
+    const float PI = 3.14159265358979323846f; // Ya llegamos a un nivel de desesperacion increible
+    float cond = cos((pos_x & 1) * PI);
 
     if (pos_x < width && pos_y < height) {
-        if (factor == 1) {
-            d_img[pos] = min(255.0f, max(0.0f, o_img[pos] + coef));
+        if (cond > 0.f) {
+            float value = sin(o_img[pos]);
+            d_img[pos] = min(255.0f, max(0.0f, value * 255.f));
         } else {
-            d_img[pos] = min(255.0f, max(0.0f, o_img[pos] - coef));
+            float value = cos(o_img[pos]);
+            d_img[pos] = min(255.0f, max(0.0f, value * 255.f));
         }
     }
 }

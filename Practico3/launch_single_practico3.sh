@@ -44,7 +44,7 @@ if [[ $index -eq -1 ]]; then
 fi
 
 # Start the loop
-for j in {1..10}
+for j in {1..2}
 do
   #for i in "${!algorithms[@]}"; do
   #  echo "Algorithm: ${algorithms[$i]}"
