@@ -36,7 +36,7 @@ enum algorithms {
 int main(int argc, char** argv){
 
 	const char * path;
-    int divisor = 1;
+    int power = 0;
     int algorithm = -1;
 
 	if (argc < 2) printf("Debe ingresar el nombre del archivo\n");
@@ -45,22 +45,23 @@ int main(int argc, char** argv){
     else if (argc == 3) {
         // read image from file and apply filter only on the 1/d divisor part of the image
         path = argv[argc - 2];
-        divisor = atoi(argv[argc - 1]);
-        if (divisor == 0) {
-            printf("El divisor debe ser entero y mayor a 0\n");
+        power = atoi(argv[argc - 1]);
+        if (power < 0) {
+            printf("El divisor debe ser entero y mayor o igual a 0\n");
             return 0;
         }
     } else if (argc == 4) {
         // id of algorithm
         path = argv[argc - 3];
-        divisor = atoi(argv[argc - 2]);
-        if (divisor == 0) {
-            printf("El divisor debe ser entero y mayor a 0\n");
+        power = atoi(argv[argc - 2]);
+        if (power < 0) {
+            printf("El divisor debe ser entero y mayor o igual a 0\n");
             return 0;
         }
         algorithm = atoi(argv[argc - 1]);
     }
 
+    float divisor = pow(2, power);
     float fraction = 1.0f / divisor;
 
 	CImg<float> image(path);

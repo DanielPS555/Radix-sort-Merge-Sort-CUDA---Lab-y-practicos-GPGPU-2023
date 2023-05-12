@@ -58,6 +58,7 @@ __global__ void ajustar_brillo_no_coalesced_kernel(float* o_img, float* d_img, i
 
 }
 
+#define ITERATIONS 10
 // Ej1b - 1
 __global__ void ej1b_no_div_kernel(float* o_img, float* d_img, int width, int height, float coef){
     
@@ -66,14 +67,14 @@ __global__ void ej1b_no_div_kernel(float* o_img, float* d_img, int width, int he
 
     int pos = pos_x + pos_y * width;
 
-    int par = pos_x & 1;
+    int par = pos_x % 2;
 
     // Asumo tamaño de imagen multiplo de 64
     // pos_x = 2 * pos_x - 63 * par; // (pos_x - 32 * par) * 2 + par -> Equivale al if y else de la version div
 
-    float value = sin(o_img[pos]) * par + cos(o_img[pos]) * (1 - par);
-    d_img[pos] = min(255.0f,max(0.0f,value * 255.f));
-
+    for(int i=0;i<ITERATIONS;i++){
+        d_img[pos]=min(255.0f,o_img[pos] + 1 - 2 * par);
+    }
 }
 
 // Ej1b - 2
@@ -84,16 +85,16 @@ __global__ void ej1b_div_kernel(float* o_img, float* d_img, int width, int heigh
 
     int pos = pos_x + pos_y * width;
 
-    const float PI = 3.14159265358979323846f; // Ya llegamos a un nivel de desesperacion increible
-    float cond = cos((pos_x & 1) * PI);
+    int par = pos_x % 2;
 
-    if (pos_x < width && pos_y < height) {
-        if (cond > 0.f) {
-            float value = sin(o_img[pos]);
-            d_img[pos] = min(255.0f, max(0.0f, value * 255.f));
-        } else {
-            float value = cos(o_img[pos]);
-            d_img[pos] = min(255.0f, max(0.0f, value * 255.f));
+    // Divergent branching based on the value of 'par'
+    if (par == 0) {
+        for(int i=0;i<ITERATIONS;i++){
+            d_img[pos]=min(255.0f,o_img[pos] + 1);
+        }
+    } else {
+        for(int i=0;i<ITERATIONS;i++){
+            d_img[pos]=min(255.0f,o_img[pos] - 1);
         }
     }
 }
