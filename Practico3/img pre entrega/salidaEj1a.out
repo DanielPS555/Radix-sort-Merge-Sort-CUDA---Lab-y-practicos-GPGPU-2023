@@ -1,0 +1,91 @@
+nvcc: NVIDIA (R) Cuda compiler driver
+Copyright (c) 2005-2023 NVIDIA Corporation
+Built on Tue_Feb__7_19:32:13_PST_2023
+Cuda compilation tools, release 12.1, V12.1.66
+Build cuda_12.1.r12.1/compiler.32415258_0
+nvcc -arch=sm_60 -Xptxas -dlcm=cg main.cpp blur.cu -o blur -O3 -L/usr/X11R6/lib -lm -lpthread -lX11
+blur.cu(76): error: more than one instance of overloaded function "max" matches the argument list:
+            function "max(double, float)" (declared at line 1112 of /usr/local/cuda/bin/../targets/x86_64-linux/include/crt/math_functions.hpp)
+            function "max(float, float)" (declared at line 1097 of /usr/local/cuda/bin/../targets/x86_64-linux/include/crt/math_functions.hpp)
+            function "max(int, unsigned int)" (declared at line 998 of /usr/local/cuda/bin/../targets/x86_64-linux/include/crt/math_functions.hpp)
+            function "max(int, int)" (declared at line 1147 of /usr/local/cuda/bin/../targets/x86_64-linux/include/crt/math_functions.hpp)
+            argument types are: (int, float)
+          d_img[pos]=max(0 , min(255.0f,d_img[pos] + (1 - 2 * par)*coefAux));
+                     ^
+
+blur.cu(96): error: more than one instance of overloaded function "max" matches the argument list:
+            function "max(double, float)" (declared at line 1112 of /usr/local/cuda/bin/../targets/x86_64-linux/include/crt/math_functions.hpp)
+            function "max(float, float)" (declared at line 1097 of /usr/local/cuda/bin/../targets/x86_64-linux/include/crt/math_functions.hpp)
+            function "max(int, unsigned int)" (declared at line 998 of /usr/local/cuda/bin/../targets/x86_64-linux/include/crt/math_functions.hpp)
+            function "max(int, int)" (declared at line 1147 of /usr/local/cuda/bin/../targets/x86_64-linux/include/crt/math_functions.hpp)
+            argument types are: (int, float)
+              d_img[pos]=max(0, min(255.0f,d_img[pos] + coefAux));
+                         ^
+
+blur.cu(100): error: more than one instance of overloaded function "max" matches the argument list:
+            function "max(double, float)" (declared at line 1112 of /usr/local/cuda/bin/../targets/x86_64-linux/include/crt/math_functions.hpp)
+            function "max(float, float)" (declared at line 1097 of /usr/local/cuda/bin/../targets/x86_64-linux/include/crt/math_functions.hpp)
+            function "max(int, unsigned int)" (declared at line 998 of /usr/local/cuda/bin/../targets/x86_64-linux/include/crt/math_functions.hpp)
+            function "max(int, int)" (declared at line 1147 of /usr/local/cuda/bin/../targets/x86_64-linux/include/crt/math_functions.hpp)
+            argument types are: (int, float)
+              d_img[pos]=max(0 , min(255.0f,d_img[pos] - coefAux));
+                         ^
+
+3 errors detected in the compilation of "blur.cu".
+make: *** [all] Error 2
+Algorithm: MAIN_AJUSTE_BRILLO_CPU
+/var/spool/slurm/d/job2848061/slurm_script: line 39: ./blur: No such file or directory
+Algorithm: MAIN_AJUSTE_BRILLO_NO_COALESCED
+/var/spool/slurm/d/job2848061/slurm_script: line 39: ./blur: No such file or directory
+Algorithm: MAIN_AJUSTE_BRILLO_COALESCED
+/var/spool/slurm/d/job2848061/slurm_script: line 39: ./blur: No such file or directory
+Algorithm: MAIN_EFECTO_PAR_IMPAR_NO_DIVERGENTE
+/var/spool/slurm/d/job2848061/slurm_script: line 39: ./blur: No such file or directory
+Algorithm: MAIN_EFECTO_PAR_IMPAR_DIVERGENTE
+/var/spool/slurm/d/job2848061/slurm_script: line 39: ./blur: No such file or directory
+Algorithm: MAIN_BLUR_GPU
+/var/spool/slurm/d/job2848061/slurm_script: line 39: ./blur: No such file or directory
+Algorithm: MAIN_BLUR_CPU
+/var/spool/slurm/d/job2848061/slurm_script: line 39: ./blur: No such file or directory
+Algorithm: MAIN_AJUSTE_BRILLO_CPU
+/var/spool/slurm/d/job2848061/slurm_script: line 39: ./blur: No such file or directory
+Algorithm: MAIN_AJUSTE_BRILLO_NO_COALESCED
+/var/spool/slurm/d/job2848061/slurm_script: line 39: ./blur: No such file or directory
+Algorithm: MAIN_AJUSTE_BRILLO_COALESCED
+/var/spool/slurm/d/job2848061/slurm_script: line 39: ./blur: No such file or directory
+Algorithm: MAIN_EFECTO_PAR_IMPAR_NO_DIVERGENTE
+/var/spool/slurm/d/job2848061/slurm_script: line 39: ./blur: No such file or directory
+Algorithm: MAIN_EFECTO_PAR_IMPAR_DIVERGENTE
+/var/spool/slurm/d/job2848061/slurm_script: line 39: ./blur: No such file or directory
+Algorithm: MAIN_BLUR_GPU
+/var/spool/slurm/d/job2848061/slurm_script: line 39: ./blur: No such file or directory
+Algorithm: MAIN_BLUR_CPU
+/var/spool/slurm/d/job2848061/slurm_script: line 39: ./blur: No such file or directory
+Algorithm: MAIN_AJUSTE_BRILLO_CPU
+/var/spool/slurm/d/job2848061/slurm_script: line 39: ./blur: No such file or directory
+Algorithm: MAIN_AJUSTE_BRILLO_NO_COALESCED
+/var/spool/slurm/d/job2848061/slurm_script: line 39: ./blur: No such file or directory
+Algorithm: MAIN_AJUSTE_BRILLO_COALESCED
+/var/spool/slurm/d/job2848061/slurm_script: line 39: ./blur: No such file or directory
+Algorithm: MAIN_EFECTO_PAR_IMPAR_NO_DIVERGENTE
+/var/spool/slurm/d/job2848061/slurm_script: line 39: ./blur: No such file or directory
+Algorithm: MAIN_EFECTO_PAR_IMPAR_DIVERGENTE
+/var/spool/slurm/d/job2848061/slurm_script: line 39: ./blur: No such file or directory
+Algorithm: MAIN_BLUR_GPU
+/var/spool/slurm/d/job2848061/slurm_script: line 39: ./blur: No such file or directory
+Algorithm: MAIN_BLUR_CPU
+/var/spool/slurm/d/job2848061/slurm_script: line 39: ./blur: No such file or directory
+Algorithm: MAIN_AJUSTE_BRILLO_CPU
+/var/spool/slurm/d/job2848061/slurm_script: line 39: ./blur: No such file or directory
+Algorithm: MAIN_AJUSTE_BRILLO_NO_COALESCED
+/var/spool/slurm/d/job2848061/slurm_script: line 39: ./blur: No such file or directory
+Algorithm: MAIN_AJUSTE_BRILLO_COALESCED
+/var/spool/slurm/d/job2848061/slurm_script: line 39: ./blur: No such file or directory
+Algorithm: MAIN_EFECTO_PAR_IMPAR_NO_DIVERGENTE
+/var/spool/slurm/d/job2848061/slurm_script: line 39: ./blur: No such file or directory
+Algorithm: MAIN_EFECTO_PAR_IMPAR_DIVERGENTE
+/var/spool/slurm/d/job2848061/slurm_script: line 39: ./blur: No such file or directory
+Algorithm: MAIN_BLUR_GPU
+/var/spool/slurm/d/job2848061/slurm_script: line 39: ./blur: No such file or directory
+Algorithm: MAIN_BLUR_CPU
+/var/spool/slurm/d/job2848061/slurm_script: line 39: ./blur: No such file or directory
