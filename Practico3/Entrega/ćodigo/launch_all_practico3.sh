@@ -19,26 +19,31 @@ export PATH=$PATH:/usr/local/cuda/bin
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64
 #cd /clusteruy/home/...
 
-nvcc --version
-
-# cd anio2023
 make
 sleep 2
 declare -a algorithms=("MAIN_AJUSTE_BRILLO_CPU" "MAIN_AJUSTE_BRILLO_NO_COALESCED" "MAIN_AJUSTE_BRILLO_COALESCED" "MAIN_EFECTO_PAR_IMPAR_NO_DIVERGENTE" "MAIN_EFECTO_PAR_IMPAR_DIVERGENTE" "MAIN_BLUR_GPU" "MAIN_BLUR_CPU")
 
-file="test.csv"
+## Variables
+file="test.csv"  # Output CSV file name with execution times
+size=2           # How many times the image will be resized
+                 # 0 -> original size,
+                 # 1 -> original size and 1/2
+                 # 2 -> original size, 1/2 and 1/4,
+                 # 3 -> original size, 1/2, 1/4 and 1/8
+
 rm -f $file
 echo "Algorithm,Size,Ms" > $file
 
 
 # Start the loop
-for j in {3..0}
+for ((j=0; j<=$size; j++))
 do
   for i in "${!algorithms[@]}"; do
     echo "Algorithm: ${algorithms[$i]}"
     ./blur img/fing1.pgm $j $i >> $file
   done
 done
+
 
 
 # $1 $2 $3 $4 $5 $6 $7 $8 $9 $10 $11 $12 $13 $14 $15
