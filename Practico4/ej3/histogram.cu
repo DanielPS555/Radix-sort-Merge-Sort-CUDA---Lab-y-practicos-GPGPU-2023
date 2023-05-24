@@ -6,8 +6,6 @@
 
 #include "include/histogram.h"
 
-#define BLOCK_SIZE 32
-
 #define CUDA_CHK(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
 {
@@ -43,6 +41,35 @@ __global__ void simple_histogram_kernel(float *img_gpu_in, float *img_gpu_out, i
     }
 }
 
+__global__ void shared_memory_histogram_kernel(float *img_gpu_in, float *img_gpu_out, int width, int height) {
+    __shared__ float h_block[COLOR_SIZE];
+
+    int tid = threadIdx.x + threadIdx.y * blockDim.x;
+    if (tid < COLOR_SIZE) {
+        h_block[tid] = 0.f;
+    }
+
+    __syncthreads();
+
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+    float color = COLOR_SIZE; // Out of range
+    if (x < width && y < height) {
+        color = img_gpu_in[x + y * width];
+    }
+
+    if (color < (float)COLOR_SIZE) {
+        atomicAdd(&h_block[(int)color], 1.f);
+    }
+
+    __syncthreads();
+
+    if (tid < COLOR_SIZE) {
+        atomicAdd(&img_gpu_out[tid], h_block[tid]);
+    }
+}
+
 
 // Kernel callers
 void gpu_execute_kernel(algorithm_type algo, const dim3 &gridSize, const dim3 &blockSize, float *img_gpu_in, float *img_gpu_out, int width, int height) {
@@ -51,7 +78,7 @@ void gpu_execute_kernel(algorithm_type algo, const dim3 &gridSize, const dim3 &b
             simple_histogram_kernel<<<gridSize, blockSize>>>(img_gpu_in, img_gpu_out, width, height);
             break;
         case SHARED_MEMORY_HISTOGRAM:
-            // improved_transpose_kernel<<<gridSize, blockSize>>>(img_gpu_in, img_gpu_out, width, height);
+            shared_memory_histogram_kernel<<<gridSize, blockSize>>>(img_gpu_in, img_gpu_out, width, height);
             break;
         case IMPROVED_SHARED_MEMORY_HISTOGRAM:
             // improved_transpose_dummy_kernel<<<gridSize, blockSize>>>(img_gpu_in, img_gpu_out, width, height);

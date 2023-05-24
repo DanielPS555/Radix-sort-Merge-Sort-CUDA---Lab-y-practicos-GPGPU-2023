@@ -33,7 +33,7 @@ rm -f $file
 
 echo "Algorithm,Ms" > $file
 
-for algorithm in {0..0}
+for algorithm in {0..1}
 do
   ./histogram in/fing1.pgm $algorithm >> $file
 done

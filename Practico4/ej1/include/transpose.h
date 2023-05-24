@@ -5,6 +5,8 @@
 #ifndef PRACTICO4_TRANSPOSE_H
 #define PRACTICO4_TRANSPOSE_H
 
+#define BLOCK_SIZE 32
+
 enum algorithm_type {
     SIMPLE_TRANSPOSE,
     IMPROVED_TRANSPOSE,
