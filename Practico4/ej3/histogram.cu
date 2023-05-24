@@ -54,13 +54,13 @@ __global__ void shared_memory_histogram_kernel(float *img_gpu_in, float *img_gpu
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
 
-    float color = COLOR_SIZE; // Out of range
+    int color = COLOR_SIZE; // Out of range
     if (x < width && y < height) {
-        color = img_gpu_in[x + y * width];
+        color = (int)img_gpu_in[x + y * width];
     }
 
-    if (color < (float)COLOR_SIZE) {
-        atomicAdd(&h_block[(int)color], 1.f);
+    if (color < COLOR_SIZE) {
+        atomicAdd(&h_block[color], 1.f);
     }
 
     __syncthreads();
