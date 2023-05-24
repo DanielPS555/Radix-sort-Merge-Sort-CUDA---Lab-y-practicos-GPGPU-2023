@@ -36,7 +36,7 @@ int main(int argc, char** argv){
 
     // Read image
     CImg<float> image(path);
-    CImg<float> image_out(image.height(), image.width(),1,1,0);
+    CImg<float> image_out(image.width(), image.height(),1,1,0);
     // Image matrices
     float *img_cpu_matrix = image.data();
     float *img_cpu_out_matrix = image_out.data();

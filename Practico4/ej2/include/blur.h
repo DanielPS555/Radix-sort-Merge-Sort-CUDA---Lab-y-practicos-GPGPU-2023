@@ -6,7 +6,7 @@
 #define PRACTICO4_BLUR_H
 
 enum algorithm_type {
-    BLUR_WITH_SHARED
+    BLUR_WITH_SHARED,
     BLUR_WITHOUT_SHARED
 };
 

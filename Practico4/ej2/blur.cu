@@ -36,8 +36,8 @@ __global__ void blur_with_shared_memory(float * src, float * dst, int width, int
     if(k % 32 != 0)
         length_dummy_alineacion = 32 - k % 32;
 
-    int search_area_posicion_y = max(0, blockIdx.y * blockDim.y - k); //Posicion en la imagen, del inicio del vertical del area que leemos de global para pasar a cache
-    int search_area_posicion_x = max(0, blockIdx.x * blockDim.x - k - length_dummy_alineacion); //Posicion en la imagen, inicio horizontal del area que leemos de memoria global, no pasamos los primeros ni ultimos length_dummy_alineacion a compartida
+    int search_area_posicion_y =  blockIdx.y * blockDim.y - k; //Posicion en la imagen, del inicio del vertical del area que leemos de global para pasar a cache
+    int search_area_posicion_x =  blockIdx.x * blockDim.x - k - length_dummy_alineacion; //Posicion en la imagen, inicio horizontal del area que leemos de memoria global, no pasamos los primeros ni ultimos length_dummy_alineacion a compartida
     int search_area_size_y = blockDim.y + 2*k;
     int search_area_size_x = blockDim.x + 2*(k + length_dummy_alineacion);
 
@@ -54,29 +54,64 @@ __global__ void blur_with_shared_memory(float * src, float * dst, int width, int
             continue;
 
         int posy = search_area_posicion_y + i / search_area_size_x;
-        int valorPixel = src[posy * width + posx];
+
+        if (posx > width || posx < 0 || posy > heigth || posy < 0 ) //Recien controlamos que el pizel buscado este en la imagen aqui, al hacerlo aqui se simplifican las cuentas
+            continue;
+
+        float valorPixel = src[posy * width + posx];
         imagenShared[ (posy - search_area_posicion_y)*ventana_size_x + (posx - search_area_posicion_x - length_dummy_alineacion)] = valorPixel;
-
-
     }
 
     __syncthreads();
 
-    //Esto es una prueba para ver si lo de arriba quedo bien, luego lo cambio por el blur
+    int inicio_bloque_x = blockIdx.x * blockDim.x;
+    int inicio_bloque_y = blockIdx.y * blockDim.y;
+    int posicion_x = inicio_bloque_x + threadIdx.x;
+    int posicion_y = inicio_bloque_y + threadIdx.y;
 
-    int valorCompartida = imagenShared[ (threadIdx.y + k)*ventana_size_x + (threadIdx.x + k)];
-    dst[ (threadIdx.y + blockDim.y * blockIdx.y) * width + (threadIdx.x + blockDim.x * blockIdx.x)] = max( 0.0f , valorCompartida - 100);
+    int inicioVertical = max(0, posicion_y - k);
+    int finVertical = min(heigth, posicion_y + k);
+    int inicioHorizontal = max(0, posicion_x - k);
+    int finHorizontal = min(width, posicion_x + k);
 
+    int tam = (finVertical - inicioVertical + 1) * (finHorizontal - inicioHorizontal + 1);
+    double acumulador = 0;
+    for (int fila = inicioVertical; fila <= finVertical; fila++)
+        for (int columna = inicioHorizontal; columna <= finHorizontal; columna++)
+            acumulador += imagenShared[(fila + k - inicio_bloque_y)*ventana_size_x + (columna + k - inicio_bloque_x)]; //Recordar que la memoria compartida es del bloque,
+                                                                                                                       // por lo que tengo que corregir por el inicio del bloque
+                                                                                                                       // ademas como el bloque es de dimencion (32 + 2k) x ( 16 + 2k) tengo que sumar k a la posicion
+
+    dst[ posicion_y * width + posicion_x] = acumulador/tam;
+
+}
+
+
+__global__ void blur_without_shared_memory(float * src, float * dst, int width, int height, int k){
+    int pos_x = blockIdx.x * blockDim.x + threadIdx.x;
+    int pos_y = blockIdx.y * blockDim.y + threadIdx.y;
+
+    int inicioVertical = max(0, pos_y - k);
+    int finVertical = min(height, pos_y + k);
+    int inicioHorizontal = max(0, pos_x - k);
+    int finHorizontal = min(width, pos_x + k);
+
+    int tam = (finVertical - inicioVertical + 1) * (finHorizontal - inicioHorizontal + 1);
+    double acumulador = 0;
+    for (int fila = inicioVertical; fila <= finVertical; fila++)
+        for (int columna = inicioHorizontal; columna <= finHorizontal; columna++)
+            acumulador += src[fila*width + columna];
+    dst[pos_y*width + pos_x] = acumulador/tam;
 }
 
 
 void gpu_execute_kernel(algorithm_type algo, const dim3 &gridSize, const dim3 &blockSize, float *img_gpu_in, float *img_gpu_out, int width, int height, int k) {
     switch (algo) {
         case BLUR_WITHOUT_SHARED:
-
+            blur_without_shared_memory<<<gridSize, blockSize>>>(img_gpu_in, img_gpu_out, width, height, k);
             break;
         case BLUR_WITH_SHARED:
-            blur_with_shared_memory<<<gridSize, blockSize, (32 + 2*k)*(16*2*k)*sizeof(float)>>>(img_gpu_in, img_gpu_out, width, height, k); //ToDo buscar forma de sacar el hardcode del 32 y 16
+            blur_with_shared_memory<<<gridSize, blockSize, (32+2*k)*(16+2*k)*sizeof(float)>>>(img_gpu_in, img_gpu_out, width, height, k); //ToDo buscar forma de sacar el hardcode del 32 y 16
             break;
 
     }
