@@ -35,5 +35,5 @@ echo "Algorithm,Ms" > $file
 
 for algorithm in {0..0}
 do
-  ./transpose in/fing1.pgm $algorithm >> $file
+  ./histogram in/fing1.pgm $algorithm >> $file
 done

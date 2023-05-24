@@ -52,7 +52,7 @@ int main(int argc, char** argv){
     // Create file histogram_%d.txt
     FILE *f = fopen(fname, "w");
     for (int i = 0; i < COLOR_SIZE; i++) {
-        fprintf(f, "%d,%f\n", i, cpu_histogram[i]);
+        fprintf(f, "%d,%.0f\n", i, cpu_histogram[i]);
     }
     fclose(f);
 

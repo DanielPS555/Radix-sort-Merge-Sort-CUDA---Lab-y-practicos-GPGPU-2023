@@ -37,6 +37,6 @@ for algorithm in {0..2}
 do
   for i in {0..3}
   do
-    ./transpose in/fing1.pgm $algorithm >> $file
+    ./histogram in/fing1.pgm $algorithm >> $file
   done
 done

@@ -33,13 +33,13 @@ __global__ void simple_histogram_kernel(float *img_gpu_in, float *img_gpu_out, i
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
 
-    int character = COLOR_SIZE; // Out of range
+    float color = COLOR_SIZE; // Out of range
     if (x < width && y < height) {
-        character = (int) img_gpu_in[x + y * width];
+        color = img_gpu_in[x + y * width];
     }
 
-    if (character < COLOR_SIZE) {
-        atomicAdd(&img_gpu_out[character], 1);
+    if (color < (float)COLOR_SIZE) {
+        atomicAdd(&img_gpu_out[(int)color], 1.f);
     }
 }
 
@@ -67,10 +67,14 @@ void allocate_and_copy_gpu(float* &gpu_in, float* &gpu_out, float *cpu_in, float
     size_t hist_size = COLOR_SIZE * sizeof(float);
 
     CUDA_CHK ( cudaMalloc((void**)& gpu_in, size) )
-    CUDA_CHK ( cudaMalloc((void**)& gpu_out, hist_size ))
+
+    // Initialize gpu_out in 0
+    CUDA_CHK ( cudaMalloc((void**)& gpu_out, hist_size) )
 
     CUDA_CHK ( cudaMemcpy(gpu_in, cpu_in, size, cudaMemcpyHostToDevice) )
     CUDA_CHK ( cudaMemcpy(gpu_out, cpu_out, hist_size, cudaMemcpyHostToDevice) )
+
+    CUDA_CHK ( cudaMemset(gpu_out, 0, hist_size) )
 }
 
 void copy_and_free_gpu(float* &gpu_in, float* &gpu_out, float *cpu_out, int width, int height) {
