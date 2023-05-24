@@ -48,7 +48,7 @@ int main(int argc, char** argv){
     execute_algorithm(algo, img_cpu_matrix, img_cpu_out_matrix, image.width(), image.height());
 
     char fname[30];
-    sprintf(fname, "output_brillo_%d.ppm", algo);
+    sprintf(fname, "output_transpose_%d.ppm", algo);
     image_out.save(fname);
 
     return 0;

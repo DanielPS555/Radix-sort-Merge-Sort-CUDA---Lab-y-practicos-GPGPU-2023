@@ -28,13 +28,8 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
             elap = 1000 * (t_fin.tv_sec - t_ini.tv_sec) + (t_fin.tv_nsec - t_ini.tv_nsec)/1000000.0;         \
         }
 
-/**
- * Simple transpose kernel
- * @param img_gpu_in
- * @param img_gpu_out
- * @param width
- * @param height
- */
+// Kernels
+
 __global__ void simple_transpose_kernel(float *img_gpu_in, float *img_gpu_out, int width, int height) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -44,13 +39,6 @@ __global__ void simple_transpose_kernel(float *img_gpu_in, float *img_gpu_out, i
     }
 }
 
-/**
- * Improved transpose kernel
- * @param img_gpu_in
- * @param img_gpu_out
- * @param width
- * @param height
- */
 __global__ void improved_transpose_kernel(float *img_gpu_in, float *img_gpu_out, int width, int height) {
     __shared__ float m_block[BLOCK_SIZE * BLOCK_SIZE];
 
@@ -80,13 +68,6 @@ __global__ void improved_transpose_kernel(float *img_gpu_in, float *img_gpu_out,
 
 }
 
-/**
- * Improved transpose kernel
- * @param img_gpu_in
- * @param img_gpu_out
- * @param width
- * @param height
- */
 __global__ void improved_transpose_dummy_kernel(float *img_gpu_in, float *img_gpu_out, int width, int height) {
     __shared__ float m_block[(BLOCK_SIZE + 1) * BLOCK_SIZE];
 
