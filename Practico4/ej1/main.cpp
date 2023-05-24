@@ -4,30 +4,21 @@
 
 using namespace cimg_library;
 
-enum algorithm_type {
-    SIMPLE_TRANSPOSE,
-    IMPROVED_TRANSPOSE,
-    IMPROVED_TRANSPOSE_DUMMY,
-};
-
 void execute_algorithm(algorithm_type algo, float* in_cpu_m, float* out_cpu_m, int width, int height) {
     /*
      * Execute and print time of the algorithm
      */
-    double time;
+    double time = execute_kernel(algo, in_cpu_m, out_cpu_m, width, height);
     switch (algo) {
         case SIMPLE_TRANSPOSE: {
-            time = simple_transpose(in_cpu_m, out_cpu_m, width, height);
             printf("SIMPLE_TRANSPOSE,%.4f\n", time);
             break;
         }
         case IMPROVED_TRANSPOSE: {
-            time = improved_transpose(in_cpu_m, out_cpu_m, width, height);
             printf("IMPROVED_TRANSPOSE,%.4f\n", time);
             break;
         }
         case IMPROVED_TRANSPOSE_DUMMY: {
-            time = improved_transpose_dummy(in_cpu_m, out_cpu_m, width, height);
             printf("IMPROVED_TRANSPOSE_DUMMY,%.4f\n", time);
             break;
         }

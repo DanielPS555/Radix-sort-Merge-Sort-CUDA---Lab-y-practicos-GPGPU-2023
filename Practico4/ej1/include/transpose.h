@@ -5,8 +5,12 @@
 #ifndef PRACTICO4_TRANSPOSE_H
 #define PRACTICO4_TRANSPOSE_H
 
-double simple_transpose(float* in_cpu_m, float* out_cpu_m, int width, int height);
-double improved_transpose(float* in_cpu_m, float* out_cpu_m, int width, int height);
-double improved_transpose_dummy(float* in_cpu_m, float* out_cpu_m, int width, int height);
+enum algorithm_type {
+    SIMPLE_TRANSPOSE,
+    IMPROVED_TRANSPOSE,
+    IMPROVED_TRANSPOSE_DUMMY,
+};
+
+double execute_kernel(algorithm_type algo, float* in_cpu_m, float* out_cpu_m, int width, int height);
 
 #endif //PRACTICO4_TRANSPOSE_H

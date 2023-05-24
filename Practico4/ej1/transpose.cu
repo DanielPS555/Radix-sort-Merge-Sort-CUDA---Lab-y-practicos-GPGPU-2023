@@ -117,20 +117,18 @@ __global__ void improved_transpose_dummy_kernel(float *img_gpu_in, float *img_gp
 }
 
 // Kernel callers
-void gpu_simple_transpose(const dim3 &gridSize, const dim3 &blockSize, float *img_gpu_in, float *img_gpu_out, int width, int height) {
-    simple_transpose_kernel<<<gridSize, blockSize>>>(img_gpu_in, img_gpu_out, width, height);
-    CUDA_CHK(cudaGetLastError())
-    CUDA_CHK(cudaDeviceSynchronize())
-}
-
-void gpu_improved_transpose(const dim3 &gridSize, const dim3 &blockSize, float *img_gpu_in, float *img_gpu_out, int width, int height) {
-    improved_transpose_kernel<<<gridSize, blockSize>>>(img_gpu_in, img_gpu_out, width, height);
-    CUDA_CHK(cudaGetLastError())
-    CUDA_CHK(cudaDeviceSynchronize())
-}
-
-void gpu_improved_transpose_dummy(const dim3 &gridSize, const dim3 &blockSize, float *img_gpu_in, float *img_gpu_out, int width, int height) {
-    improved_transpose_dummy_kernel<<<gridSize, blockSize>>>(img_gpu_in, img_gpu_out, width, height);
+void gpu_execute_kernel(algorithm_type algo, const dim3 &gridSize, const dim3 &blockSize, float *img_gpu_in, float *img_gpu_out, int width, int height) {
+    switch (algo) {
+        case SIMPLE_TRANSPOSE:
+            simple_transpose_kernel<<<gridSize, blockSize>>>(img_gpu_in, img_gpu_out, width, height);
+            break;
+        case IMPROVED_TRANSPOSE:
+            improved_transpose_kernel<<<gridSize, blockSize>>>(img_gpu_in, img_gpu_out, width, height);
+            break;
+        case IMPROVED_TRANSPOSE_DUMMY:
+            improved_transpose_dummy_kernel<<<gridSize, blockSize>>>(img_gpu_in, img_gpu_out, width, height);
+            break;
+    }
     CUDA_CHK(cudaGetLastError())
     CUDA_CHK(cudaDeviceSynchronize())
 }
@@ -152,7 +150,7 @@ void copy_and_free_gpu(float* &gpu_in, float* &gpu_out, float *cpu_out, int widt
     CUDA_CHK ( cudaFree(gpu_out) )
 }
 
-double simple_transpose(float* in_cpu_m, float* out_cpu_m, int width, int height) {
+double execute_kernel(algorithm_type algo, float* in_cpu_m, float* out_cpu_m, int width, int height) {
     float * img_gpu = NULL, * img_gpu_out = NULL;
     allocate_and_copy_gpu(img_gpu, img_gpu_out, in_cpu_m, out_cpu_m, width, height);
 
@@ -160,40 +158,9 @@ double simple_transpose(float* in_cpu_m, float* out_cpu_m, int width, int height
     dim3 gridSize( (int)((float)width)/BLOCK_SIZE, (int)((float)height)/BLOCK_SIZE ); // 40 x 30
     dim3 blockSize(BLOCK_SIZE, BLOCK_SIZE);
 
-    MS(gpu_simple_transpose(gridSize, blockSize, img_gpu, img_gpu_out, width, height), time)
+    MS(gpu_execute_kernel(algo, gridSize, blockSize, img_gpu, img_gpu_out, width, height), time)
 
     copy_and_free_gpu(img_gpu, img_gpu_out, out_cpu_m, width, height);
 
     return time;
 }
-
-double improved_transpose(float* in_cpu_m, float* out_cpu_m, int width, int height) {
-    float * img_gpu = NULL, * img_gpu_out = NULL;
-    allocate_and_copy_gpu(img_gpu, img_gpu_out, in_cpu_m, out_cpu_m, width, height);
-
-    // TODO: Assume the image is multiple of BLOCK_SIZE
-    dim3 gridSize( (int)((float)width)/BLOCK_SIZE, (int)((float)height)/BLOCK_SIZE ); // 40 x 30
-    dim3 blockSize(BLOCK_SIZE, BLOCK_SIZE);
-
-    MS(gpu_improved_transpose(gridSize, blockSize, img_gpu, img_gpu_out, width, height), time)
-
-    copy_and_free_gpu(img_gpu, img_gpu_out, out_cpu_m, width, height);
-
-    return time;
-}
-
-double improved_transpose_dummy(float* in_cpu_m, float* out_cpu_m, int width, int height) {
-    float * img_gpu = NULL, * img_gpu_out = NULL;
-    allocate_and_copy_gpu(img_gpu, img_gpu_out, in_cpu_m, out_cpu_m, width, height);
-
-    // TODO: Assume the image is multiple of BLOCK_SIZE
-    dim3 gridSize( (int)((float)width)/BLOCK_SIZE, (int)((float)height)/BLOCK_SIZE ); // 40 x 30
-    dim3 blockSize(BLOCK_SIZE, BLOCK_SIZE);
-
-    MS(gpu_improved_transpose_dummy(gridSize, blockSize, img_gpu, img_gpu_out, width, height), time)
-
-    copy_and_free_gpu(img_gpu, img_gpu_out, out_cpu_m, width, height);
-
-    return time;
-}
-
