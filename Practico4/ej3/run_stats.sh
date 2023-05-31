@@ -33,7 +33,9 @@ rm -f $file
 
 echo "Algorithm,Ms" > $file
 
+nsys --version
+
 for algorithm in {0..1}
 do
-  ./histogram in/dwsample-pgm-4k.pgm $algorithm >> $file
+  nsys profile --stats=true -o my_profile_output ./histogram in/fing1.pgm $algorithm >> $file
 done

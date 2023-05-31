@@ -6,7 +6,7 @@
 #define PRACTICO4_HISTOGRAM_H
 
 #define COLOR_SIZE 256
-#define BLOCK_SIZE 32
+#define BLOCK_SIZE 16
 
 enum algorithm_type {
     SIMPLE_HISTOGRAM,
