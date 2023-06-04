@@ -15,5 +15,6 @@ enum algorithm_type {
 };
 
 double execute_kernel(algorithm_type algo, float* in_cpu_m, float* out_cpu_m, int width, int height);
+double execute_histogram(float* in_cpu_m, float* out_cpu_m, int width, int height);
 
 #endif //PRACTICO4_HISTOGRAM_H

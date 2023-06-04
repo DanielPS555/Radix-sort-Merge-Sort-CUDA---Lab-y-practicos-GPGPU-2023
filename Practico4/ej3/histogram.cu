@@ -91,38 +91,53 @@ __global__ void matrix_histogram_kernel(float *img_gpu_in, float *img_gpu_out, i
 #define COLOR_PER_BLOCK 4
 #define REDUCE_BLOCK_HEIGHT 128
 
-__global__ void matrix_histogram_reduce_kernel(float *i_histogram_m, float *o_histogram_m, size_t height, size_t width) {
-    extern __shared__ float h_block[]; // Color size * reduce size
+__global__ void matrix_histogram_reduce_kernel(float *i_histogram_m, float *o_histogram_m, size_t height, size_t width, size_t size) {
+    extern __shared__ float h_block[];
 
-    size_t reduce_height = blockDim.x;
-    size_t reduce_width = blockDim.y * 2;
+    // Initialize shared memory
+    size_t tid_init = threadIdx.x + threadIdx.y * blockDim.x;
+    if (tid_init < size) {
+        h_block[tid_init] = 0.f;
+        h_block[tid_init + blockDim.x * blockDim.y] = 0.f;
+    }
 
-    size_t color_per_block = blockDim.x;
-    size_t tid = threadIdx.x * reduce_width + threadIdx.y; // tid on the shared block (transposed)
-    size_t color_id = threadIdx.x % color_per_block;
+    __syncthreads();
 
     // Copy to shared memory
-    size_t g_mem_a = blockIdx.y * width * blockDim.x * 2 + threadIdx.y * width + threadIdx.x;
+    // width should be 256 color size
+    size_t g_mem_a = blockIdx.y * blockDim.y * width * 2 + threadIdx.y * width + threadIdx.x + blockIdx.x * blockDim.x;
     size_t g_mem_b = g_mem_a + width * blockDim.y;
 
-    h_block[tid] = i_histogram_m[g_mem_a];
-    h_block[tid + blockDim.y] = i_histogram_m[g_mem_b];
+    size_t tid = threadIdx.x * blockDim.y * 2 + threadIdx.y; // tid on the shared block (transposed)
+
+    if (g_mem_a < height * width) {
+        h_block[tid] = i_histogram_m[g_mem_a];
+    }
+    if (g_mem_b < height * width) {
+        h_block[tid + blockDim.y] = i_histogram_m[g_mem_b];
+    }
 
     __syncthreads();
 
     // Reduce
-    int i = reduce_width / 2;
-    while (i > 0) {
-        if (threadIdx.y < i) {
-            h_block[tid] += h_block[tid + i];
+    size_t reduce_width = fminf(blockDim.y * 2, height);
+    int j = reduce_width;
+    while (j > 1)
+    {
+        reduce_width = (j + 1) / 2; // integer ceil
+        if (threadIdx.y < reduce_width && (threadIdx.y + reduce_width) < j) {
+            h_block[tid] += h_block[tid + reduce_width];
         }
+        j = reduce_width;
         __syncthreads();
-        i /= 2;
     }
 
+    __syncthreads();
+
+    int color = threadIdx.x + blockIdx.x * blockDim.x;
     // Write to global memory
     if (threadIdx.y == 0) {
-        o_histogram_m[blockIdx.y * color_per_block + color_id] = h_block[tid];
+        o_histogram_m[blockIdx.y * 256 + color] = h_block[tid];
     }
 
 }
@@ -136,8 +151,7 @@ void gpu_execute_kernel(algorithm_type algo, const dim3 &gridSize, const dim3 &b
         case SHARED_MEMORY_HISTOGRAM:
             shared_memory_histogram_kernel<<<gridSize, blockSize>>>(img_gpu_in, img_gpu_out, width, height);
             break;
-        case IMPROVED_SHARED_MEMORY_HISTOGRAM:
-            matrix_histogram_kernel<<<gridSize, blockSize>>>(img_gpu_in, img_gpu_out, width, height);
+        default:
             break;
     }
     CUDA_CHK(cudaGetLastError())
@@ -186,10 +200,51 @@ double execute_kernel(algorithm_type algo, float* in_cpu_m, float* out_cpu_m, in
  * This is for the kernel with a matrix of histogram (ex b)
  */
 
+#define COLORS_PER_BLOCK 4
+#define BLOCKS_PER_BLOCK 64  // Must be divisible by 2
 
-double execute_kernel_histogram(float* in_cpu_m, float* out_cpu_m, int width, int height) {
+bool execute_kernel_histogram(int width, int height, float * img_gpu, float * img_gpu_hist, float * img_gpu_hist_b) {
+    // Grid
+    dim3 gridSize( (int)((float)width)/BLOCK_SIZE, (int)((float)height)/BLOCK_SIZE );
+    dim3 blockSize(BLOCK_SIZE, BLOCK_SIZE);
+    size_t block_qty = (int)((float)width)/BLOCK_SIZE * (int)((float)height)/BLOCK_SIZE;
+    // Execute
+    // Create histogram matrix
+    matrix_histogram_kernel<<<gridSize, blockSize>>>(img_gpu, img_gpu_hist, width, height);
+
+    bool swapped = false;
+    int reduceWidth = COLOR_SIZE;
+    int reduceHeight = block_qty;
+
+    dim3 reduceBlockSize(COLORS_PER_BLOCK, BLOCKS_PER_BLOCK / 2);
+    size_t sharedMemSize = BLOCKS_PER_BLOCK * COLORS_PER_BLOCK * sizeof(int);
+
+    do
+    {
+        dim3 reduceGridSize( (int)ceil(((float)reduceWidth)/COLORS_PER_BLOCK), (int)ceil(((float)reduceHeight)/BLOCKS_PER_BLOCK)); // Multiplied 2 because each block sums "another" block
+
+        CUDA_CHK(cudaDeviceSynchronize())
+        if (!swapped)
+            matrix_histogram_reduce_kernel<<<reduceGridSize, reduceBlockSize, sharedMemSize>>>(img_gpu_hist, img_gpu_hist_b, reduceHeight, reduceWidth, block_qty * 256);
+        else
+            matrix_histogram_reduce_kernel<<<reduceGridSize, reduceBlockSize, sharedMemSize>>>(img_gpu_hist_b, img_gpu_hist, reduceHeight, reduceWidth, block_qty * 256);
+
+        CUDA_CHK(cudaGetLastError())
+
+        swapped = !swapped;
+
+        reduceHeight = ceil((float)reduceHeight / BLOCKS_PER_BLOCK);
+
+    } while (1 < reduceHeight);
+
+    CUDA_CHK(cudaDeviceSynchronize())
+
+    return swapped;
+}
+
+double execute_histogram(float* in_cpu_m, float* out_cpu_m, int width, int height) {
     // img_gpu is the same as in previous exercises, img_gpu_out should be a matrix of histograms 256 * block_qty
-    float * img_gpu = NULL, * img_gpu_hist = NULL;
+    float * img_gpu = NULL, * img_gpu_hist = NULL, *img_gpu_hist_b = NULL;
 
     size_t in_size = width * height * sizeof(float);
     size_t block_qty = (int)((float)width)/BLOCK_SIZE * (int)((float)height)/BLOCK_SIZE;
@@ -198,15 +253,21 @@ double execute_kernel_histogram(float* in_cpu_m, float* out_cpu_m, int width, in
     // Allocate
     CUDA_CHK ( cudaMalloc((void**)& img_gpu, in_size) )
     CUDA_CHK ( cudaMalloc((void**)& img_gpu_hist, hist_size) )
+    CUDA_CHK ( cudaMalloc((void**)& img_gpu_hist_b, hist_size) )
     CUDA_CHK ( cudaMemcpy(img_gpu, in_cpu_m, in_size, cudaMemcpyHostToDevice) )
     CUDA_CHK ( cudaMemset(img_gpu_hist, 0, hist_size) )  // Initialize gpu_out in 0
 
-    // Grid
-    dim3 gridSize( (int)((float)width)/BLOCK_SIZE, (int)((float)height)/BLOCK_SIZE );
-    dim3 blockSize(BLOCK_SIZE, BLOCK_SIZE);
+    bool swapped;
+    MS(swapped = execute_kernel_histogram(width, height, img_gpu, img_gpu_hist, img_gpu_hist_b), time)
 
-    // Execute
+    if (!swapped)
+        CUDA_CHK ( cudaMemcpy(out_cpu_m, img_gpu_hist, 256 * sizeof(int), cudaMemcpyDeviceToHost) )
+    else
+        CUDA_CHK ( cudaMemcpy(out_cpu_m, img_gpu_hist_b, 256 * sizeof(int), cudaMemcpyDeviceToHost) )
 
+    CUDA_CHK ( cudaFree(img_gpu) )
+    CUDA_CHK ( cudaFree(img_gpu_hist) )
+    CUDA_CHK ( cudaFree(img_gpu_hist_b) )
 
-
+    return time;
 }

@@ -5,20 +5,18 @@
 #SBATCH --time=00:01:00
 
 #SBATCH --partition=besteffort
-# SBATCH --partition=normal
 
 #SBATCH --qos=besteffort_gpu
-# SBATCH --qos=gpu
 
 #SBATCH --gres=gpu:p100:1
-# #SBATCH --mail-type=ALL
-#SBATCH --mail-user=mi@correo
-#SBATCH -o salidaEj1a.out
+#SBATCH -o ej3.out
 
-export PATH=$PATH:/usr/local/cuda/bin
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64
+export PATH=$PATH:/usr/local/cuda-12.1/bin
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-12.1/lib64
 
 make
+
+images=("dwsample-pgm-640.pgm" "dwsample-pgm-1280.pgm" "dwsample-pgm-1920.pgm" "dwsample-pgm-4k.pgm")
 
 ## Variables
 
@@ -31,9 +29,13 @@ file="test.csv"
 
 rm -f $file
 
-echo "Algorithm,Ms" > $file
+echo "Image,Algorithm,Ms" > $file
 
-for algorithm in {0..1}
+for algorithm in {0..2}
 do
-  ./histogram in/dwsample-pgm-4k.pgm $algorithm >> $file
+  for image in "${images[@]}"
+  do
+    echo -n "$image", >> $file
+    ./histogram in/"$image" "$algorithm" >> $file
+  done
 done

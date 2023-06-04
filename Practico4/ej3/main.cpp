@@ -8,17 +8,20 @@ void execute_algorithm(algorithm_type algo, float* in_cpu_m, float* out_cpu_m, i
     /*
      * Execute and print time of the algorithm
      */
-    double time = execute_kernel(algo, in_cpu_m, out_cpu_m, width, height);
+    double time = 0;
     switch (algo) {
         case SIMPLE_HISTOGRAM: {
+            time = execute_kernel(algo, in_cpu_m, out_cpu_m, width, height);
             printf("SIMPLE_HISTOGRAM,%.4f\n", time);
             break;
         }
         case SHARED_MEMORY_HISTOGRAM: {
+            time = execute_kernel(algo, in_cpu_m, out_cpu_m, width, height);
             printf("SHARED_MEMORY_HISTOGRAM,%.4f\n", time);
             break;
         }
         case IMPROVED_SHARED_MEMORY_HISTOGRAM: {
+            time = execute_histogram(in_cpu_m, out_cpu_m, width, height);
             printf("IMPROVED_SHARED_MEMORY_HISTOGRAM,%.4f\n", time);
             break;
         }

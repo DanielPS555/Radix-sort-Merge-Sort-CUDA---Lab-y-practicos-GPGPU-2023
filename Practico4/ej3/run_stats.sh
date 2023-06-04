@@ -1,24 +1,22 @@
 #!/bin/bash
-#SBATCH --job-name=gpgpu10_practico4_ej1
+#SBATCH --job-name=practico4ej3
 #SBATCH --ntasks=1
-#SBATCH --mem=1G
-#SBATCH --time=00:01:00
+#SBATCH --mem=4096
+#SBATCH --time=00:02:00
 
 #SBATCH --partition=besteffort
-# SBATCH --partition=normal
 
 #SBATCH --qos=besteffort_gpu
-# SBATCH --qos=gpu
 
 #SBATCH --gres=gpu:p100:1
-# #SBATCH --mail-type=ALL
-#SBATCH --mail-user=mi@correo
-#SBATCH -o salidaEj1a.out
+#SBATCH -o salida.out
 
-export PATH=$PATH:/usr/local/cuda/bin
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64
+export PATH=$PATH:/usr/local/cuda-12.1/bin
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-12.1/lib64
 
-make
+source /etc/profile.d/modules.sh
+
+make perf
 
 ## Variables
 
@@ -33,9 +31,7 @@ rm -f $file
 
 echo "Algorithm,Ms" > $file
 
-nsys --version
-
-for algorithm in {0..1}
+for algorithm in {2..2}
 do
-  nsys profile --stats=true -o my_profile_output ./histogram in/fing1.pgm $algorithm >> $file
+  compute-sanitizer ./histogram in/fing1.pgm $algorithm >> $file
 done
