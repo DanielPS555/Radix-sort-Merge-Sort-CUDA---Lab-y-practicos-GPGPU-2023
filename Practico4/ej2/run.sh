@@ -2,7 +2,7 @@
 #SBATCH --job-name=gpgpu10_practico4_ej2
 #SBATCH --ntasks=1
 #SBATCH --mem=1G
-#SBATCH --time=00:10:00
+#SBATCH --time=00:1:00
 
 #SBATCH --partition=besteffort
 # SBATCH --partition=normal
