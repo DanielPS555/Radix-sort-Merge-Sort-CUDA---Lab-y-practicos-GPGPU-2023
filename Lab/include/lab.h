@@ -7,6 +7,6 @@
 
 #include "utils.h"
 
-void radix_sort_kernel(int * src, int * dst);
+void test_radix_sort(int * src, int * dst);
 
 #endif //LAB_LAB_H

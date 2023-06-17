@@ -5,7 +5,7 @@
 #define WARP_SIZE 32
 #define FULL_MASK 0xffffffff
 #define NONE_MASK 0x00000000
-
+#define RADIX_SORT_BLOCK_SIZE 256
 
 __device__
 int  exlusiveScan(int valor){
@@ -39,20 +39,14 @@ int  exlusiveScan(int valor){
     return valor;
 }
 
-/**
- * Coloca a todos los valores que no cumplen con la maskara previo de los que si cumplen, manteniendo el orden relativo
- */
+
+
+
+/*
 __device__
 int split(int lane, int currentValue, int mask){
 
-    int notValidateMask = (currentValue & mask) == 0 ? 1 : 0;
-    int valueInScan = exlusiveScan(notValidateMask);
 
-    int totalFalse = notValidateMask + valueInScan; //Este valor es invalido para todos menos el ultimo lane, por eso en la siguiente linea todos se lo pide
-    totalFalse = __shfl_sync(FULL_MASK, totalFalse, WARP_SIZE - 1); //Todos los lane obtiene el valor correcto del ultimo lane
-
-    int t = lane - valueInScan + totalFalse;
-    int nuevaPosicion = notValidateMask ? valueInScan : t;
 
     //------------------
 
@@ -79,58 +73,63 @@ int split(int lane, int currentValue, int mask){
         ordered = false;
     }
 }
+*/
 
-
-
-
-/**
- * Ordena los warps de tamaño 32 utilizando raid sort
- * Se asume que los bloques son unidimencionales
- * @param src
- * @param dst
- */
 __global__
 void radix_sort_kernel(int * src, int * dst){
+
+    __shared__ int swap [RADIX_SORT_BLOCK_SIZE];
+
     int lane = threadIdx.x % WARP_SIZE; //Se asume que los bloques son multiplos de 32, por lo que para obtener mi lane no presiso saber nada mas que mi modulo 32.
+    int tie = threadIdx.x / WARP_SIZE;
     int idInArray = threadIdx.x + blockDim.x * blockIdx.x;
     int currentValue = src[idInArray];
 
-    int valorAnterior = __shfl_up_sync(FULL_MASK, currentValue, 1); //Obtengo el valor de mi lane previo
+    int valorThreadPrevio = __shfl_up_sync(FULL_MASK, currentValue, 1); //Obtengo el valor de mi lane previo
     if (lane == 0)
-        valorAnterior --; //En caso que sea el primer lane, hago que mi "anterior" numero sea siempre menor, en particular uno menor
+        valorThreadPrevio = currentValue - 1; //En caso que sea el primer lane, hago que mi "anterior" numero sea siempre menor, en particular uno menor
 
     int mask = 1;
+    while (__all_sync(FULL_MASK,valorThreadPrevio <= currentValue) == 0){ //La operacion termina cuando el warp esta ordenado
 
-    while (__all(valorAnterior <= currentValue) == 0){ //La operacion termina cuando el warp esta ordenado
+        int notValidateMask = (currentValue & mask) == 0 ? 1 : 0;
+        int valueInScan = exlusiveScan(notValidateMask);
 
-        currentValue = split(lane, currentValue, mask);
+        int totalFalse = notValidateMask + valueInScan; //Este valor es invalido para todos menos el ultimo lane, por eso en la siguiente linea todos se lo pide
+        totalFalse = __shfl_sync(FULL_MASK, totalFalse, WARP_SIZE - 1); //Todos los lane obtiene el valor correcto del ultimo lane
+
+        int t = lane - valueInScan + totalFalse;
+        int nuevaPosicion = notValidateMask ? valueInScan : t;
+        swap[tie + nuevaPosicion] = currentValue;
+
+        __syncwarp();
+
+        currentValue = swap[tie + lane];
 
         mask <<= 1; //Muevo la mascara
 
-        int valorAnterior = __shfl_up_sync(FULL_MASK, currentValue, 1);
+        valorThreadPrevio = __shfl_up_sync(FULL_MASK, currentValue, 1);
         if (lane == 0)
-            valorAnterior --;
+            valorThreadPrevio = currentValue - 1;
     }
 
-
-    dst[idInArray] = currentValue;
-
+    dst[idInArray] = currentValue; //para verificar condicion de salida
 }
 
-void test_radix(int * srcCpu, int * dstCpu){
+void test_radix_sort(int * srcCpu, int * dstCpu){
     int * srcGpu = NULL, *dstGpu = NULL;
 
     //allocate
-    size_t size = 32 * sizeof (int);
+    size_t size = 64 * sizeof (int);
     CUDA_CHK( cudaMalloc ((void **)& srcGpu , size ) )
     CUDA_CHK( cudaMalloc ((void **)& dstGpu , size ))
 
     CUDA_CHK( cudaMemcpy(srcGpu, srcCpu, size, cudaMemcpyHostToDevice))
 
-    dim3 gridSize ( 1, 1);
+    dim3 gridSize ( 2, 1);
     dim3 blockSize (32, 1);
 
-    test_radix_kernel<<<gridSize, blockSize>>>(srcGpu, dstGpu, 32);
+    radix_sort_kernel<<<gridSize, blockSize>>>(srcGpu, dstGpu);
     CUDA_CHK(cudaGetLastError())
     CUDA_CHK(cudaDeviceSynchronize())
 
