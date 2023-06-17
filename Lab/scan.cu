@@ -4,23 +4,17 @@
 
 #define WARP_SIZE 32
 #define FULL_MASK 0xffffffff
-#define NONE_MASK 0x00000000
 
 __device__
-void exlusiveScan(int * src, int *dst, int posInicioSrc, int posInicioDst){
+void exlusiveScan(int valor, int * valorSalida){
     int offset = 1;
     int lane = threadIdx.x;
-    int valor = src[posInicioSrc + lane];
-
 
     // 1º Etapa
-
     while (offset < WARP_SIZE ) {
-        int antValue = valor;
-        valor += __shfl_up_sync(FULL_MASK, valor, offset);
-        if ( ((lane + 1) % (offset*2)) != 0 ) { //ToDo preguntar al profe cual podria ser la estategia para mejorar esto
-            valor = antValue;
-        }
+        int preValor = __shfl_up_sync(FULL_MASK, valor, offset);
+        if ( ((lane + 1) % (offset*2)) == 0 )
+            valor += preValor;
         offset *= 2;
     }
 
@@ -41,13 +35,7 @@ void exlusiveScan(int * src, int *dst, int posInicioSrc, int posInicioDst){
         offset /= 2;
     }
 
-    dst[posInicioDst + lane] = valor;
-}
-
-
-__global__
-void callPruebaScan(int * src, int * dst,int posInicioSrc, int posInicioDst ){
-    exlusiveScan(src, dst, posInicioSrc, posInicioDst);
+    valorSalida = valor;
 }
 
 void pruebaScan(int * srcCpu, int * dstCpu){
