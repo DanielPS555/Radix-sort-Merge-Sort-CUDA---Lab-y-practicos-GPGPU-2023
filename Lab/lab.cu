@@ -5,22 +5,18 @@
 #define WARP_SIZE 32
 #define FULL_MASK 0xffffffff
 #define NONE_MASK 0x00000000
+#define RADIX_SORT_BLOCK_SIZE 256
 
 __device__
-void exlusiveScan(int * src, int *dst, int posInicioSrc, int posInicioDst){
+int  exlusiveScan(int valor){
     int offset = 1;
     int lane = threadIdx.x;
-    int valor = src[posInicioSrc + lane];
-
 
     // 1º Etapa
-
     while (offset < WARP_SIZE ) {
-        int antValue = valor;
-        valor += __shfl_up_sync(FULL_MASK, valor, offset);
-        if ( ((lane + 1) % (offset*2)) != 0 ) { //ToDo preguntar al profe cual podria ser la estategia para mejorar esto
-            valor = antValue;
-        }
+        int preValor = __shfl_up_sync(FULL_MASK, valor, offset);
+        if ( ((lane + 1) % (offset*2)) == 0 )
+            valor += preValor;
         offset *= 2;
     }
 
@@ -40,19 +36,20 @@ void exlusiveScan(int * src, int *dst, int posInicioSrc, int posInicioDst){
 
         offset /= 2;
     }
-
-    dst[posInicioDst + lane] = valor;
+    return valor;
 }
 
 
-/**
- * Order the array based on the byte mask.
- * @param array The array to be ordered (in shared memory). Use pointer arithmetic to privatize the array.
- * @param temp_array The temporary array to be used (in shared memory). Use pointer arithmetic to privatize the array.
- */
+
+
+/*
 __device__
-void split(int* array, int* prefix_array, int mask, bool &ordered)
-{
+int split(int lane, int currentValue, int mask){
+
+
+
+    //------------------
+
     int tid = threadIdx.x + threadIdx.y * blockDim.x; // tid in block
     int wid = tid % WARP_SIZE; // id in warp
 
@@ -70,67 +67,69 @@ void split(int* array, int* prefix_array, int mask, bool &ordered)
 
     // check if the array is ordered
     value = array[wid];
-    int nextValue = __shfl_down_sync(0xffffffff, value, 1);
+    int nextValue = __shfl_down_sync(FULL_MASK, value, 1);
 
     if (wid < WARP_SIZE - 1 && value > nextValue) {
         ordered = false;
     }
 }
-
-#define BLOCK_SIZE 32
+*/
 
 __global__
-void test_radix_kernel(int * src, int * dst, size_t size){
-    __shared__ int data   [BLOCK_SIZE * BLOCK_SIZE];  // shared memory to store the data to be sorted
-    __shared__ int prefix [BLOCK_SIZE * BLOCK_SIZE];  // shared memory for temporal values
-    __shared__ bool ordered [BLOCK_SIZE * BLOCK_SIZE / WARP_SIZE]; // shared memory to check if the array is ordered
-    // load data
-    int tid = threadIdx.x + threadIdx.y * blockDim.x; // tid in block
+void radix_sort_kernel(int * src, int * dst){
 
-    if (tid < size && tid < BLOCK_SIZE * BLOCK_SIZE) {
-        data[tid] = src[tid];
-    }
+    __shared__ int swap [RADIX_SORT_BLOCK_SIZE];
 
-    // initialize ordered array
-    if (tid % WARP_SIZE == 0 && tid < size) {
-        ordered[tid] = false;
-    }
+    int lane = threadIdx.x % WARP_SIZE; //Se asume que los bloques son multiplos de 32, por lo que para obtener mi lane no presiso saber nada mas que mi modulo 32.
+    int tie = threadIdx.x / WARP_SIZE;
+    int idInArray = threadIdx.x + blockDim.x * blockIdx.x;
+    int currentValue = src[idInArray];
 
-    int warp_id = tid / WARP_SIZE; // warp id
+    int valorThreadPrevio = __shfl_up_sync(FULL_MASK, currentValue, 1); //Obtengo el valor de mi lane previo
+    if (lane == 0)
+        valorThreadPrevio = currentValue - 1; //En caso que sea el primer lane, hago que mi "anterior" numero sea siempre menor, en particular uno menor
 
-    __syncthreads();
-
-    // TODO: Do it in while and test if it is ordered in each iteration with a shuffle
     int mask = 1;
-    while (!ordered[warp_id])
-    {
-        // set ordered to true (it will be set to false if the array is not ordered)
-        ordered[warp_id] = true;  // Shared memory, ignore any conflicts (only 1 write)
-        split(data, prefix, mask, ordered[warp_id]);
-        __syncthreads();  // this might not be needed
-        mask <<= 1;
+    while (__all_sync(FULL_MASK,valorThreadPrevio <= currentValue) == 0){ //La operacion termina cuando el warp esta ordenado
+
+        int notValidateMask = (currentValue & mask) == 0 ? 1 : 0;
+        int valueInScan = exlusiveScan(notValidateMask);
+
+        int totalFalse = notValidateMask + valueInScan; //Este valor es invalido para todos menos el ultimo lane, por eso en la siguiente linea todos se lo pide
+        totalFalse = __shfl_sync(FULL_MASK, totalFalse, WARP_SIZE - 1); //Todos los lane obtiene el valor correcto del ultimo lane
+
+        int t = lane - valueInScan + totalFalse;
+        int nuevaPosicion = notValidateMask ? valueInScan : t;
+        swap[tie + nuevaPosicion] = currentValue;
+
+        __syncwarp();
+
+        currentValue = swap[tie + lane];
+
+        mask <<= 1; //Muevo la mascara
+
+        valorThreadPrevio = __shfl_up_sync(FULL_MASK, currentValue, 1);
+        if (lane == 0)
+            valorThreadPrevio = currentValue - 1;
     }
 
-    // write data
-    if (tid < size) {
-        dst[tid] = data[tid];  // TODO: we are assuming that the kernel runs with a single block
-    }
+    dst[idInArray] = currentValue; //para verificar condicion de salida
 }
 
-void test_radix(int * srcCpu, int * dstCpu){
+void test_radix_sort(int * srcCpu, int * dstCpu){
     int * srcGpu = NULL, *dstGpu = NULL;
 
     //allocate
-    size_t size = 32 * sizeof (int);
+    size_t size = 64 * sizeof (int);
     CUDA_CHK( cudaMalloc ((void **)& srcGpu , size ) )
     CUDA_CHK( cudaMalloc ((void **)& dstGpu , size ))
 
     CUDA_CHK( cudaMemcpy(srcGpu, srcCpu, size, cudaMemcpyHostToDevice))
 
-    dim3 gridSize ( 1, 1);
+    dim3 gridSize ( 2, 1);
     dim3 blockSize (32, 1);
 
-    test_radix_kernel<<<gridSize, blockSize>>>(srcGpu, dstGpu, 32);
+    radix_sort_kernel<<<gridSize, blockSize>>>(srcGpu, dstGpu);
     CUDA_CHK(cudaGetLastError())
     CUDA_CHK(cudaDeviceSynchronize())
 
