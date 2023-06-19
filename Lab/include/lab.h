@@ -7,6 +7,8 @@
 
 #include "utils.h"
 
-void test_radix_sort(int * src, int * dst);
+void test_radix_sort(int * src);
+
+void test_with_block_under_256(int * srcCpu, int length);
 
 #endif //LAB_LAB_H
