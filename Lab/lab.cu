@@ -123,7 +123,7 @@ void radix_sort_kernel(int * src){
 
 /**
  * Dado un array ordenado desde [posicionInicio, posicionInicio + size ], devuelve la posicion en la que deberia ser insertado objetoBuscado
- * Nota: si previoAIguales == true, este debuelbe la posicion de forma que objetoBuscado sea insertado antes que los iguales,
+ * Nota: si previoAIguales == true, este devuelve la posicion de forma que objetoBuscado sea insertado antes que los iguales,
  *  en caso contrario sera la posicion de ser insertado detras de los iguales
  *
  *  Retorna la posicion relativa dentro del arreglo. O sea seria la posicion real dentro del array, menos el inicio
@@ -202,6 +202,92 @@ void orderedJoin(int * src, int largoA, int largoB){
     src[ blockIdx.x * blockDim.x + threadIdx.x ] = shared[threadIdx.x];
 }
 
+
+
+
+/**
+ * Threads will read
+ */
+ /*
+__global__
+void read_separators(int* a_in, int* b_in, int* s_out, int a_size, int b_size, int s_size, int t_size, int separator_count)
+{
+    // TODO: are s_size and separator_count the same?
+
+    int section_id = blockIdx.x;  // A - B section
+    int section_offset = section_id * separator_count;
+    int separatorId = threadIdx.x + threadIdx.y * blockDim.x;
+
+    if (separatorId >= separator_count)
+        return;
+
+    int a_index = separatorId * t_size;
+    int b_index = a_index;
+
+    if (separatorId < s_size)
+    {
+        // last segment gets the last element
+        if ((s_size - 1) == separatorId)
+        {
+            a_index = a_size - 1;
+            b_index = b_size - 1;
+        }
+
+        if (a_index < a_size)
+            s_out[section_offset + separatorId] = a_in[a_index];
+
+        if (index < b_size)
+            s_out[section_offset + separatorId + separator_count] = b_in[b_index];
+    }
+} */
+
+
+/**
+ * Read separators from an input buffer.
+ * @param data_in Input buffer
+ * @param data_size Size of the input buffer
+ * @param separators_out Output buffer with each separator
+ * @param separators_size Size of the output buffer separators_out for all separators in all segments
+ * @param sector_size Size of the sector A + B
+ * @param separators_per_sector Total amount of separators per sector
+ * The kernel will read both A and B buffers and will write the separators in the output buffer.
+ */
+__global__
+void read_separators(int * data_in, size_t data_size, int * separators_out, size_t separators_size, int sector_size, int separators_per_sector) {
+    // Asumamos por ahora que no hay casos donde el tamaño de los datos no sea multiplo del tamaño de la seccion
+    //int separatorId = threadIdx.x + threadIdx.y * blockDim.x + SECTION_ID * SECTION_SIZE;
+#define THREAD_ID threadIdx.x + threadIdx.y * blockDim.x
+#define BLOCK_ID  blockIdx.x + blockIdx.y * gridDim.x
+#define BLOCK_DIM blockDim.x * blockDim.y
+
+    int segment_size = sector_size / separators_per_sector;
+
+    // unique id for the thread
+    int uid = THREAD_ID + BLOCK_ID * BLOCK_DIM;
+    // based on the unique id we find the sector_id. The id of the AB sector
+    int sector_id = uid / sector_size;
+    // separator in the sector
+    int separator_id = uid % separators_per_sector;
+    // offset for the data array
+    int sector_offset_d = sector_id * sector_size;
+
+    // int a_index = separatorId * t_size + SECTION_ID * segment_size * 2;
+    int a_index = sector_offset_d + separator_id * segment_size;
+    // int b_index = a_index + segment_size;
+    int b_index = a_index + sector_size / 2;
+
+    // offset para acceder al array de separadores
+    int sector_offset_s = separators_per_sector * sector_id;
+
+    if (separator_id < separators_per_sector / 2 && sector_offset_s + separator_id + separators_per_sector / 2 < separators_size) {
+        if (a_index < data_size)
+            separators_out[sector_offset_s + separator_id] = data_in[a_index];
+
+        if (b_index < data_size)
+            separators_out[sector_offset_s + separator_id + separators_per_sector / 2] = data_in[b_index];
+    }
+}
+
 void test_with_block_under_256(int * srcCpu, int length){
     int * srcGpu = NULL;
 
@@ -237,8 +323,82 @@ void test_with_block_under_256(int * srcCpu, int length){
 
     CUDA_CHK( cudaMemcpy(srcCpu, srcGpu, size, cudaMemcpyDeviceToHost))
     CUDA_CHK ( cudaFree(srcGpu) )
-
 }
+
+void test_secuence_reading (int * srcCpu, int length){
+
+    int blockSize = 256; // se ejecuta test_with_block_under_256 antes
+
+    int * srcGpu = NULL;
+
+    size_t size = length * sizeof (int);
+    CUDA_CHK( cudaMalloc ((void **)& srcGpu , size ) )
+
+    CUDA_CHK( cudaMemcpy(srcGpu, srcCpu, size, cudaMemcpyHostToDevice))
+
+    if (blockSize <= length) {
+
+        int segment_count = length / (256 / 2); // How many segments of 256/2 are there
+
+        // so the seprators are always going to be the same, only their vales are going to change
+        int* gpu_segment_values;
+        CUDA_CHK( cudaMalloc ((void **)& gpu_segment_values , segment_count * sizeof(int) ) )
+        int* cpu_segment_values = (int*) malloc(segment_count * sizeof(int));
+
+        // read separators
+        // size of each A + B
+        int sector_size = blockSize * 2;
+        int t = blockSize / 2;
+
+
+        //while (segment_size <= length) {
+
+
+            // int section_qty = length / (blockSize * 2); // How many ab groups are there
+
+            //dim3 gridSize(section_qty, 1);
+            dim3 dimBlockSize(32, 32);
+            dim3 gridSize((32 * 32 + segment_count - 1) / segment_count, 1);
+            int separators_per_sector = sector_size / t;
+
+            read_separators<<<gridSize, dimBlockSize>>>(srcGpu, length, gpu_segment_values, segment_count, sector_size, separators_per_sector);
+
+            CUDA_CHK(cudaGetLastError())
+            CUDA_CHK(cudaDeviceSynchronize())
+
+            // foreach sector
+            for (int i = 0; i < segment_count; i++) {
+                printf("%d ", cpu_segment_values[i]);
+            }
+
+
+            CUDA_CHK( cudaMemcpy(cpu_segment_values, gpu_segment_values, segment_count * sizeof(int), cudaMemcpyDeviceToHost) )
+            for (int i = 0; i < segment_count; i++) {
+                printf("%d ", cpu_segment_values[i]);
+            }
+
+
+
+            // encuentro separadores
+            // Sa + Sb
+            // sector_size *= 2;
+
+        //}
+
+
+
+        printf("\n");
+
+        free(cpu_segment_values);
+        CUDA_CHK( cudaFree(gpu_segment_values) )
+
+    }
+
+    CUDA_CHK( cudaMemcpy(srcCpu, srcGpu, size, cudaMemcpyDeviceToHost))
+    CUDA_CHK ( cudaFree(srcGpu) )
+}
+
+
 
 
 void test_radix_sort(int * srcCpu){
