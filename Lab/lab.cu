@@ -75,17 +75,22 @@ int split(int lane, int currentValue, int mask){
 }
 */
 
+/**
+ * @param src Arreglo a ordenar
+ * @param positions Posiciones del valor inicial, si el arreglo es NULL se hace el radix sort comun
+ */
 __global__
-void radix_sort_kernel(int * src){
-
-    __shared__ int swap [RADIX_SORT_BLOCK_SIZE];
+void radix_sort_kernel(int * src, int * positions) {
+    __shared__ int   swap            [RADIX_SORT_BLOCK_SIZE];
+    __shared__ int  positions_array [RADIX_SORT_BLOCK_SIZE];
 
     int lane = threadIdx.x % WARP_SIZE; //Se asume que los bloques son multiplos de 32, por lo que para obtener mi lane no presiso saber nada mas que mi modulo 32.
     int tie = threadIdx.x / WARP_SIZE;
     int idInArray = threadIdx.x + blockDim.x * blockIdx.x;
     int currentValue = src[idInArray];
+    int og_position = threadIdx.x % 32;
 
-    int valorThreadPrevio = __shfl_up_sync(FULL_MASK, currentValue, 1); //Obtengo el valor de mi lane previo
+    int valorThreadPrevio = __shfl_up_sync(FULL_MASK, currentValue, 1); // Obtengo el valor de mi lane previo
     if (lane == 0)
         valorThreadPrevio = currentValue - 1; //En caso que sea el primer lane, hago que mi "anterior" numero sea siempre menor, en particular uno menor
 
@@ -100,26 +105,30 @@ void radix_sort_kernel(int * src){
 
         int t = lane - valueInScan + totalFalse;
         int nuevaPosicion = notValidateMask ? valueInScan : t;
+
         swap[tie + nuevaPosicion] = currentValue;
+        if (positions != NULL)
+            positions_array[tie + nuevaPosicion] = og_position;
 
         __syncwarp();
 
         currentValue = swap[tie + lane];
+        if (positions != NULL)
+            og_position = positions_array[tie + lane];
 
         mask <<= 1; //Muevo la mascara
 
         valorThreadPrevio = __shfl_up_sync(FULL_MASK, currentValue, 1);
+
+
         if (lane == 0)
             valorThreadPrevio = currentValue - 1;
     }
 
     src[idInArray] = currentValue;
+    if (positions != NULL)
+        positions[idInArray] = og_position;
 }
-
-
-
-
-
 
 /**
  * Dado un array ordenado desde [posicionInicio, posicionInicio + size ], devuelve la posicion en la que deberia ser insertado objetoBuscado
@@ -133,7 +142,6 @@ void radix_sort_kernel(int * src){
  * @param previoAIguales
  * @return
  */
-
 __device__
 int busquedaPorBiparticion(int * array, int posicionInicio, int size, int objetoBuscado, bool previoAIguales){
 
@@ -294,6 +302,10 @@ void test_with_block_under_256(int * srcCpu, int length){
     size_t size = length * sizeof (int);
     CUDA_CHK( cudaMalloc ((void **)& srcGpu , size ) )
 
+    // Borrar
+    int * ogPositions = NULL;
+    CUDA_CHK( cudaMalloc ((void **)& ogPositions , size ) )
+
     CUDA_CHK( cudaMemcpy(srcGpu, srcCpu, size, cudaMemcpyHostToDevice))
 
     //Etapa 1: Comienzo por el radixSort
@@ -301,7 +313,16 @@ void test_with_block_under_256(int * srcCpu, int length){
     dim3 gridSizeRadixSort ( length / 32, 1);
     dim3 blockSizeRadixSort (32, 1);
 
-    radix_sort_kernel<<<gridSizeRadixSort, blockSizeRadixSort>>>(srcGpu);
+    radix_sort_kernel<<<gridSizeRadixSort, blockSizeRadixSort>>>(srcGpu, ogPositions);
+
+    int * ogPositionsCPU = (int *) malloc (size);
+    CUDA_CHK( cudaMemcpy(ogPositionsCPU, ogPositions, size, cudaMemcpyDeviceToHost))
+
+    printf("\nOg positions: \n");
+    for (int i = 0; i < length; i++){
+        printf("%d ", ogPositionsCPU[i]);
+    }
+    printf("\n");
 
     CUDA_CHK(cudaGetLastError())
     CUDA_CHK(cudaDeviceSynchronize())
@@ -414,7 +435,7 @@ void test_radix_sort(int * srcCpu){
     dim3 gridSize ( 2, 1);
     dim3 blockSize (32, 1);
 
-    radix_sort_kernel<<<gridSize, blockSize>>>(srcGpu);
+    radix_sort_kernel<<<gridSize, blockSize>>>(srcGpu, NULL);
     CUDA_CHK(cudaGetLastError())
     CUDA_CHK(cudaDeviceSynchronize())
 
