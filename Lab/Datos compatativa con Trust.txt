@@ -1,0 +1,10 @@
+ 
+Size = 256 | Nuestro = ?? | Trust = 0.007 ms
+Size = 512 | Nuestro = ?? | Trust = 0.004 ms
+Size = 1024 | Nuestro = ?? | Trust = 0.008 ms
+Size = 2048 | Nuestro = ?? | Trust = 0.015 ms
+Size = 4096 | Nuestro = ?? | Trust = 0.032 ms
+Size = 8192 | Nuestro = ?? | Trust = 0.058 ms
+Size = 16384 | Nuestro = ?? | Trust = 0.145 ms
+Size = 32768 | Nuestro = ?? | Trust = 0.242 ms
+Size = 65536 | Nuestro = ?? | Trust = 0.584 ms

@@ -1,6 +1,7 @@
 #include <stdio.h>
 
 #include "include/lab.h"
+#include <thrust/sort.h>
 
 #define WARP_SIZE 32
 #define FULL_MASK 0xffffffff
@@ -260,4 +261,9 @@ void test_radix_sort(int * srcCpu){
 
     CUDA_CHK( cudaMemcpy(srcCpu, srcGpu, size, cudaMemcpyDeviceToHost))
     CUDA_CHK ( cudaFree(srcGpu) )
+}
+
+
+void test_with_trust(int * src, int length){
+    thrust::sort(src, src + length);
 }
