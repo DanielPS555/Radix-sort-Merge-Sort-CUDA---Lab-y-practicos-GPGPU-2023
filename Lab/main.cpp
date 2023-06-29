@@ -10,7 +10,7 @@ int main(){
     /* initialize random seed: */
     srand (time(NULL));
 
-    int length = 32;
+    int length = 1024;
 
     int * array32 = (int*)malloc(length * sizeof (int));
     for (int i = 0; i < length; ++i) {
@@ -24,21 +24,9 @@ int main(){
         printf("%d,", array32[i]);
     }
 
-    printf("\n");
+    order_array(array32, length);
 
-    // pruebaScan(array32, array32Dst);
-    //for (int i = 0; i < length / 256; i++) {
-        //test_with_block_under_256(array32 + i * 256, 256);
-        test_with_block_under_256(array32, 32);
-    //}
-
-    printf("\n Separadores \n\n");
-
-    test_secuence_reading(array32, length);
-
-    printf("\n\n\n");
-
-    printf("Luego");
+    printf("\nLuego");
     for (int i = 0; i < length; ++i) {
         if(i % 32 == 0)
             printf("\n");

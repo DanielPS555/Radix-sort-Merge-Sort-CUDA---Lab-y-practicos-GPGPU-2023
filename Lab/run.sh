@@ -15,5 +15,5 @@ export PATH=$PATH:/usr/local/cuda-12/bin
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-12/lib64
 
 make
-./sort
+compute-sanitizer ./sort
 

@@ -1,2 +1,2 @@
 all:
-	nvcc -arch=sm_60 -Xptxas -dlcm=cg  main.cpp lab.cu -o sort -O3 -L/usr/X11R6/lib -lm -lpthread -lX11
+	nvcc -arch=sm_60 -Xptxas -dlcm=cg  main.cpp lab.cu -o sort -O3 -L/usr/X11R6/lib -lm -lpthread -lX11  -g -lineinfo
