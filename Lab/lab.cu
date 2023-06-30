@@ -118,10 +118,6 @@ void radix_sort_kernel(int * src){
 }
 
 
-
-
-
-
 /**
  * Dado un array ordenado desde [posicionInicio, posicionInicio + size ], devuelve la posicion en la que deberia ser insertado objetoBuscado
  * Nota: si previoAIguales == true, este debuelbe la posicion de forma que objetoBuscado sea insertado antes que los iguales,
@@ -167,6 +163,56 @@ int busquedaPorBiparticion(int * array, int posicionInicio, int size, int objeto
 
 
 /**
+ * Se encarga de convinar el array
+ * @param arrayA
+ * @param largoA
+ * @param arrayB
+ * @param largoB
+ * @param arraySalida
+ * @param sharedToUse
+ */
+__device__
+void deviceOrderedJoin(int * src, int posicionLecturaA, int largoA, int posicionLecturaB, int largoB, int * arraySalida, int posicionSalida, int * sharedToUse){
+
+    //En una primera instancia voy a destinar los primeros "largoPorSegmento" threads para ordenar los elementos de A, los demas para ordenar los de B.
+    // ToDo utilizar la idea del ej 2 practico 4 para hacer que la lectura sea coalesed
+
+    bool soyDeB;
+    int idMiArray;
+    int valor;
+    if(threadIdx.x < largoA + largoB){
+        soyDeB = threadIdx.x >= largoA;
+        idMiArray = soyDeB ? threadIdx.x - largoA: threadIdx.x; //Es la posicion dentro de A o B respectivamente (sin contar el offset de posicionLecturaA o posicionLecturaB)
+        valor = soyDeB ? src[posicionLecturaB + idMiArray] : src[posicionLecturaA + idMiArray];
+        sharedToUse[threadIdx.x] = valor;
+    }
+    __syncthreads();
+
+    int posicionEnElOtroArray;
+    if(threadIdx.x < largoA + largoB) {
+        // Nota: Aqui hay que tener un cuidado adicional, ¿Que pasa si en la misma posiicon i de A y B tenemos que r(a_i, B) = r(b_i, A)?
+        //         La solucion que encontramos es hacer que ese j no sea igual discriminando entre el array A y el B, dando la presetncia a A, mas detalle a continuacion:
+        //         Notar que si a_i < b_i, entonces r(a_i, B) < r(b_i,B) = i = r(a_i, A) < r(b_i, A) (analogo para b_i < a_i), entonces aqui no hay problema.
+        //         Pero lo mismo no ocurre si a_i = b_i = h, ya que dependiendo de la politica de la busqueda, tanto el a_i como el b_i tendrian como r(a_i, B) = r(b_i, A) = posicion al inicio (o final) de la rafaga de h
+        //         Es por eso que se propone que la politica de busqueda de r(a_i, B) y r(b_i, A) sea diferente
+        //         De forma tal que los elementos de A se "inserten" previo a todos los valores iguales en B, mientras que para los de B buscaremos su posicion de forma tal que sea luego de los iguales en A
+        //         Esto ultimo es lo que representa el ultimo parametro de el metodo busquedaPorBiparticion
+        posicionEnElOtroArray = busquedaPorBiparticion(sharedToUse, soyDeB ? 0 : largoA, soyDeB ? largoA : largoB, valor, !soyDeB);
+    }
+
+    __syncthreads();
+    if(threadIdx.x < largoA + largoB) {
+        sharedToUse[idMiArray + posicionEnElOtroArray] = valor; //Escribo mi valor en la nueva posicion
+    }
+
+    __syncthreads();
+    if(threadIdx.x < largoA + largoB) {
+        arraySalida[posicionSalida + threadIdx.x] = sharedToUse[threadIdx.x];
+    }
+}
+
+
+/**
  * En base a dos array ordenados CONSECUTIVOS de largo largoA y largoB respectivamente
  * escribe en "array" el nuevo array ordenado producto de ordenar los dos anteriores
  * @param array
@@ -174,33 +220,31 @@ int busquedaPorBiparticion(int * array, int posicionInicio, int size, int objeto
  * @param largoB
  */
 __global__
-void orderedJoin(int * src, int largoA, int largoB){
-    extern __shared__ int shared[]; //Size = largoA + largob . Se almacena de forma compartida la informacion de los dos arrays a juntar
-    //Voy a destinar los primeros "largoA" threads para ordenar los elementos de A, los demas para ordenar los de B
-    bool soyDeB = threadIdx.x >= largoA;
-    int idEnArray = soyDeB ? threadIdx.x - largoA: threadIdx.x; //Es la posicion dentro de A o B respectivamente
-    int valor = src[ blockIdx.x * blockDim.x + threadIdx.x ]; //Todo analizar viabilidad de hacer consulta coalleced
-    shared[threadIdx.x] = valor;
+void orderedJoin(int * src, int largoPorSegmento){
+    extern __shared__ int shared[]; //Size = 2*largoPorSegmento . Se almacena de forma compartida la informacion de los dos arrays a juntar
+    int posInicioBloque = blockIdx.x * blockDim.x;
+    deviceOrderedJoin(src, posInicioBloque, largoPorSegmento, posInicioBloque + largoPorSegmento, largoPorSegmento, src, posInicioBloque, shared);
+}
 
-    __syncthreads();
+/**
+ * Combina las secuencias delimitadas por posSeparadoresEnA y posSeparadoresEnB de A y B respectivamente,
+ * las escribe en su respectiva posicion en el array dst
+ *
+ * Precondiciones:
+ * - A y B, se encuentan consecutivos en src,
+ * - length(A) = length(B) = largo
+ * - A comienza en 2 * largo * blockIdx.y
+ * - length(src) = length(dst)
+ * - La grilla de bloques es dimencional, el dimencion y identifica al A y B a comvinar, mientras que la dimencion x identifica al par de separadores (segmento) que hay que juntar
+ *
+ * @param posSeparadoresEnA
+ * @param posSeparadoresEnB
+ * @param src
+ * @param dst
+ * @param largo
+ */
+void mergeSegmentUsingSeparators(int * posSeparadoresEnA, int * posSeparadoresEnB, int * src , int * dst, int largo){
 
-    // Nota: Aqui hay que tener un cuidado adicional, ¿Que pasa si en la misma posiicon i de A y B tenemos que r(a_i, B) = r(b_i, A)?
-    //         La solucion que encontramos es hacer que ese j no sea igual discriminando entre el array A y el B, dando la presetncia a A, mas detalle a continuacion:
-    //         Notar que si a_i < b_i, entonces r(a_i, B) < r(b_i,B) = i = r(a_i, A) < r(b_i, A) (analogo para b_i < a_i), entonces aqui no hay problema.
-    //         Pero lo mismo no ocurre si a_i = b_i = h, ya que dependiendo de la politica de la busqueda, tanto el a_i como el b_i tendrian como r(a_i, B) = r(b_i, A) = posicion al inicio (o final) de la rafaga de h
-    //         Es por eso que se propone que la politica de busqueda de r(a_i, B) y r(b_i, A) sea diferente
-    //         De forma tal que los elementos de A se "inserten" previo a todos los valores iguales en B, mientras que para los de B buscaremos su posicion de forma tal que sea luego de los iguales en A
-    //         Esto ultimo es lo que representa el ultimo parametro de el metodo busquedaPorBiparticion
-
-    int posicionEnElOtroArray = busquedaPorBiparticion(shared, soyDeB ? 0 : largoA, soyDeB ? largoA : largoB, valor, !soyDeB);
-
-    __syncthreads();
-
-    shared[idEnArray + posicionEnElOtroArray] = valor; //Escribo mi valor en la nueva posicion
-
-    __syncthreads();
-
-    src[ blockIdx.x * blockDim.x + threadIdx.x ] = shared[threadIdx.x];
 }
 
 void test_with_block_under_256(int * srcCpu, int length){
@@ -229,7 +273,7 @@ void test_with_block_under_256(int * srcCpu, int length){
         dim3 gridSizeOrdenerJoin ( length / blockSize, 1);
         dim3 blockSizeOrdererJoin (blockSize, 1);
 
-        orderedJoin<<<gridSizeOrdenerJoin, blockSizeOrdererJoin, blockSize*sizeof(int)>>>(srcGpu, blockSize/2, blockSize/2);
+        orderedJoin<<<gridSizeOrdenerJoin, blockSizeOrdererJoin, blockSize*sizeof(int)>>>(srcGpu, blockSize/2);
         CUDA_CHK(cudaGetLastError())
         CUDA_CHK(cudaDeviceSynchronize())
 
