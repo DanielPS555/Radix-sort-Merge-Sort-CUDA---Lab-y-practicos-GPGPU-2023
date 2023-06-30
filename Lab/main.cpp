@@ -10,48 +10,49 @@
 
 void pruebaKernelD2() {
 
-    int length = 64;
-    int t = 16;
+    int lengthPorParte = 32;
+    int t = 8; //Esto es el numero maximo de elemento que puede tener A o B para hacer el merge sort
+    int numeroPartes = 2;
 
-    int b[32] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32};
-    int a[32] = {33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,};
+    int arr[64] = {8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,
+                   7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
+                   4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,
+                   3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,};
 
-    //Sa = {1,17,32}
-    //Sb = {33,49,64}
+    int Pa [12] = {0,0,0, 0, 8, 15,        0,0,0, 0, 8, 15};
+    int Pb [12] = {0,8,15,16,16,16,        0,8,15,16,16,16};
 
-    //S  = {1,17,32,33,49,64}
+    int numeroDeSeparadoresPorParte = (lengthPorParte / (t*2 / 2) + 2);
 
-    int Pb [6] = {0,16,31,32,32,32};
-    int Pa [6] = {0,0,0,0,16,31};
-
-    int * array = (int*) malloc(64*sizeof (int));
+    int * array = (int*) malloc(lengthPorParte * numeroPartes*sizeof (int));
 
 
-    int * Pa_dinamic = (int*) malloc(18*sizeof (int));
-    int * Pb_dinamic = (int*) malloc(18*sizeof (int));
+    int * Pa_dinamic = (int*) malloc(numeroDeSeparadoresPorParte*numeroPartes*sizeof (int));
+    int * Pb_dinamic = (int*) malloc(numeroDeSeparadoresPorParte*numeroPartes*sizeof (int));
 
-    for (int i = 0; i < length / 2; ++i) {
-        array[i] = a[i];
-        array[32 + i] = b[i];
+    for (int i = 0; i < lengthPorParte * numeroPartes; ++i) {
+        array[i] = arr[i];
     }
 
-    for (int i = 0; i < length / t + 2; ++i) {
+    for (int i = 0; i < numeroDeSeparadoresPorParte * numeroPartes; ++i) {
         Pa_dinamic[i] = Pa[i];
         Pb_dinamic[i] = Pb[i];
     }
 
+    printf("\nNumero de bloques (parejas A-B) = %d", numeroPartes);
+
     printf("\nOriginal");
-    for (int i = 0; i < length; ++i) {
+    for (int i = 0; i < lengthPorParte * numeroPartes; ++i) {
         if(i % 32 == 0)
             printf("\n");
         printf("%d,", array[i]);
     }
 
 
-    test_merge_segment_using_separators(array, length, Pa_dinamic, Pb_dinamic, t*2);
+    test_merge_segment_using_separators(array, lengthPorParte, Pa_dinamic, Pb_dinamic, t*2, numeroPartes);
 
     printf("\nResultado");
-    for (int i = 0; i < length; ++i) {
+    for (int i = 0; i < lengthPorParte * numeroPartes; ++i) {
         if(i % 32 == 0)
             printf("\n");
         printf("%d,", array[i]);

@@ -330,20 +330,20 @@ void test_radix_sort(int * srcCpu){
     CUDA_CHK ( cudaFree(srcGpu) )
 }
 
-void test_merge_segment_using_separators(int * array, int largo, int * sa, int * sb, int maximoSoporadoPorMergeSort){
+void test_merge_segment_using_separators(int * array, int largoPorParte, int * sa, int * sb, int maximoSoporadoPorMergeSort,int numeroPartes){
     int * srcGpu = NULL;
     int * dstGpu = NULL;
 
     int * separadoresAGpu = NULL;
     int * separadoresBGpu = NULL;
 
-    int largoSeparadores = largo / (maximoSoporadoPorMergeSort / 2) + 2;
+    int largoSeparadoresPorParte = (largoPorParte / (maximoSoporadoPorMergeSort / 2) + 2);
 
-    printf("El numero de separadores es = %d \n" , largoSeparadores);
+    printf("El numero de separadores es = %d \n" , largoSeparadoresPorParte * numeroPartes);
 
     //allocate
-    size_t size = 64 * sizeof (int);
-    size_t sizeSeparadores = largoSeparadores * sizeof(int);
+    size_t size = largoPorParte * numeroPartes * sizeof (int);
+    size_t sizeSeparadores = largoSeparadoresPorParte * numeroPartes * sizeof(int);
 
     CUDA_CHK( cudaMalloc ((void **)& srcGpu , size ) )
     CUDA_CHK( cudaMalloc ((void **)& dstGpu , size ) )
@@ -355,10 +355,10 @@ void test_merge_segment_using_separators(int * array, int largo, int * sa, int *
     CUDA_CHK( cudaMemcpy(separadoresAGpu, sa, sizeSeparadores, cudaMemcpyHostToDevice))
     CUDA_CHK( cudaMemcpy(separadoresBGpu, sb, sizeSeparadores, cudaMemcpyHostToDevice))
 
-    dim3 gridSize ( largoSeparadores, 1);
+    dim3 gridSize ( largoSeparadoresPorParte, numeroPartes);
     dim3 blockSize (maximoSoporadoPorMergeSort, 1);
 
-    mergeSegmentUsingSeparators<<<gridSize, blockSize>>>(separadoresAGpu, separadoresBGpu, srcGpu, dstGpu, largo/2);
+    mergeSegmentUsingSeparators<<<gridSize, blockSize>>>(separadoresAGpu, separadoresBGpu, srcGpu, dstGpu, largoPorParte/2);
     CUDA_CHK(cudaGetLastError())
     CUDA_CHK(cudaDeviceSynchronize())
 
