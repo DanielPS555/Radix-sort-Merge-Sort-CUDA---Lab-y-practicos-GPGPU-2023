@@ -134,6 +134,8 @@ void radix_sort_kernel(int * src){
 __device__
 int busquedaPorBiparticion(int * array, int posicionInicio, int size, int objetoBuscado, bool previoAIguales){
 
+    if(size <= 0) return 0;
+
     int final = posicionInicio + size - 1;
     int inicio = posicionInicio;
 
@@ -207,7 +209,7 @@ void deviceOrderedJoin(int * src, int posicionLecturaA, int largoA, int posicion
 
     __syncthreads();
     if(threadIdx.x < largoA + largoB) {
-        arraySalida[posicionSalida + threadIdx.x] = sharedToUse[threadIdx.x];
+        arraySalida[posicionSalida + threadIdx.x] = sharedToUse[threadIdx.x]; //Escritura en memoria global coaleced si posicionSalida es multiplo de 32
     }
 }
 
@@ -243,8 +245,29 @@ void orderedJoin(int * src, int largoPorSegmento){
  * @param dst
  * @param largo
  */
+__global__
 void mergeSegmentUsingSeparators(int * posSeparadoresEnA, int * posSeparadoresEnB, int * src , int * dst, int largo){
+    __shared__ int shared[512]; //Max que puede ocupar A + B
+    int numeroDeSegmentosPorParte = gridDim.x; // La dimencion en X nos da el numero de segmentos
 
+    int idParte = blockIdx.y;
+    int idSegmento = blockIdx.x;
+
+    int inicioA = posSeparadoresEnA[idParte * numeroDeSegmentosPorParte + idSegmento];
+    int inicioB = posSeparadoresEnB[idParte * numeroDeSegmentosPorParte + idSegmento];
+
+    int finA;
+    int finB;
+    if(idSegmento == numeroDeSegmentosPorParte - 1){ // Si soy el ultimo segmento de una parte
+        finA = largo;
+        finB = largo;
+    } else {
+        finA = posSeparadoresEnA[idParte * numeroDeSegmentosPorParte + idSegmento + 1];
+        finB = posSeparadoresEnB[idParte * numeroDeSegmentosPorParte + idSegmento + 1];
+    }
+
+    int inicioDeLaParteEnSrc = idParte * 2 * largo;
+    deviceOrderedJoin(src, inicioDeLaParteEnSrc + inicioA, max(0, finA - inicioA), inicioDeLaParteEnSrc + largo + inicioB, max(0, finB - inicioB), dst, inicioDeLaParteEnSrc + inicioA + inicioB,shared );
 }
 
 void test_with_block_under_256(int * srcCpu, int length){
@@ -307,7 +330,46 @@ void test_radix_sort(int * srcCpu){
     CUDA_CHK ( cudaFree(srcGpu) )
 }
 
+void test_merge_segment_using_separators(int * array, int largo, int * sa, int * sb, int maximoSoporadoPorMergeSort){
+    int * srcGpu = NULL;
+    int * dstGpu = NULL;
 
-void test_with_trust(int * src, int length){
+    int * separadoresAGpu = NULL;
+    int * separadoresBGpu = NULL;
+
+    int largoSeparadores = largo / (maximoSoporadoPorMergeSort / 2) + 2;
+
+    printf("El numero de separadores es = %d \n" , largoSeparadores);
+
+    //allocate
+    size_t size = 64 * sizeof (int);
+    size_t sizeSeparadores = largoSeparadores * sizeof(int);
+
+    CUDA_CHK( cudaMalloc ((void **)& srcGpu , size ) )
+    CUDA_CHK( cudaMalloc ((void **)& dstGpu , size ) )
+
+    CUDA_CHK( cudaMalloc ((void **)& separadoresAGpu , sizeSeparadores ) )
+    CUDA_CHK( cudaMalloc ((void **)& separadoresBGpu , sizeSeparadores ) )
+
+    CUDA_CHK( cudaMemcpy(srcGpu, array, size, cudaMemcpyHostToDevice))
+    CUDA_CHK( cudaMemcpy(separadoresAGpu, sa, sizeSeparadores, cudaMemcpyHostToDevice))
+    CUDA_CHK( cudaMemcpy(separadoresBGpu, sb, sizeSeparadores, cudaMemcpyHostToDevice))
+
+    dim3 gridSize ( largoSeparadores, 1);
+    dim3 blockSize (maximoSoporadoPorMergeSort, 1);
+
+    mergeSegmentUsingSeparators<<<gridSize, blockSize>>>(separadoresAGpu, separadoresBGpu, srcGpu, dstGpu, largo/2);
+    CUDA_CHK(cudaGetLastError())
+    CUDA_CHK(cudaDeviceSynchronize())
+
+    CUDA_CHK( cudaMemcpy(array, dstGpu, size, cudaMemcpyDeviceToHost))
+    CUDA_CHK ( cudaFree(srcGpu) )
+    CUDA_CHK ( cudaFree(dstGpu) )
+    CUDA_CHK ( cudaFree(separadoresAGpu) )
+    CUDA_CHK ( cudaFree(separadoresBGpu) )
+}
+
+
+void order_with_trust(int * src, int length){
     thrust::sort(src, src + length);
 }

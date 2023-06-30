@@ -37,7 +37,7 @@ int main(){
         }
 
         // Se incluyen en la prueba los tiempos de reserva de memoria en la GPU y en la tranferencia, ya que trust administra en su caso
-        MS(test_with_trust(array, length), timeTrust)
+        MS(order_with_trust(array, length), timeTrust)
         //ToDo añadir la llamada a nuestro metodo
 
         printf("\nSize = %d | Nuestro = ?? | Trust = %.3f ms", length, timeTrust);
