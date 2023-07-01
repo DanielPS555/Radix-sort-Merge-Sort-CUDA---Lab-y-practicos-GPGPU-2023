@@ -364,6 +364,7 @@ void separators_merge_kernel(int * in_data, int * in_separators_a, int * in_sepa
 void order_array(int * src_cpu, int length) {
     // 0 - Initialize GPU memory
     int * src_gpu = NULL;
+    int * dst_gpu = NULL;
     int * separators_a_gpu = NULL;
     int * separators_b_gpu = NULL;
 
@@ -371,6 +372,7 @@ void order_array(int * src_cpu, int length) {
     size_t separators_size = length / MINIMUM_BLOCK_SIZE * sizeof (int);
 
     CUDA_CHK( cudaMalloc ((void **)& src_gpu , size ) )
+    CUDA_CHK( cudaMalloc ((void **)& dst_gpu , size ) )
     CUDA_CHK( cudaMalloc ((void **)& separators_a_gpu , separators_size ) )
     CUDA_CHK( cudaMalloc ((void **)& separators_b_gpu , separators_size ) )
 
@@ -399,7 +401,7 @@ void order_array(int * src_cpu, int length) {
         dim3 gridSizeOrderedJoin ( length / blockSize, 1);
         dim3 blockSizeOrderedJoin (blockSize, 1);
 
-        orderedJoin<<<gridSizeOrderedJoin, blockSizeOrderedJoin, blockSize*sizeof(int)>>>(src_gpu, blockSize/2, blockSize/2);
+        orderedJoin<<<gridSizeOrderedJoin, blockSizeOrderedJoin, blockSize*sizeof(int)>>>(src_gpu, blockSize/2);
         CUDA_CHK(cudaGetLastError())
         CUDA_CHK(cudaDeviceSynchronize())
 
@@ -443,36 +445,42 @@ void order_array(int * src_cpu, int length) {
             CUDA_CHK(cudaDeviceSynchronize())
 
             // Debug print separators_a and separators_b
-            int * separators_a_cpu = (int *) malloc(separators_count * sizeof(int));
-            int * separators_b_cpu = (int *) malloc(separators_count * sizeof(int));
+            {
+                int * separators_a_cpu = (int *) malloc(separators_count * sizeof(int));
+                int * separators_b_cpu = (int *) malloc(separators_count * sizeof(int));
 
-            CUDA_CHK( cudaMemcpy(separators_a_cpu, separators_a_gpu, separators_count * sizeof(int), cudaMemcpyDeviceToHost))
-            CUDA_CHK( cudaMemcpy(separators_b_cpu, separators_b_gpu, separators_count * sizeof(int), cudaMemcpyDeviceToHost))
+                CUDA_CHK( cudaMemcpy(separators_a_cpu, separators_a_gpu, separators_count * sizeof(int), cudaMemcpyDeviceToHost))
+                CUDA_CHK( cudaMemcpy(separators_b_cpu, separators_b_gpu, separators_count * sizeof(int), cudaMemcpyDeviceToHost))
 
-            printf("Separators A:\n");
-            for (int i = 0; i < separators_count; i++) {
-                printf("%d ", separators_a_cpu[i]);
+                printf("Separators A:\n");
+                for (int i = 0; i < separators_count; i++) {
+                    printf("%d ", separators_a_cpu[i]);
+                }
+                printf("\n");
+
+                printf("Separators B:\n");
+                for (int i = 0; i < separators_count; i++) {
+                    printf("%d ", separators_b_cpu[i]);
+                }
+                printf("\n");
+
+                free(separators_a_cpu);
+                free(separators_b_cpu);
             }
-            printf("\n");
-
-            printf("Separators B:\n");
-            for (int i = 0; i < separators_count; i++) {
-                printf("%d ", separators_b_cpu[i]);
-            }
-            printf("\n");
-
-            free(separators_a_cpu);
-            free(separators_b_cpu);
 
             // 3.2 - Merge sort between separators
 
+            int largoSeparadoresPorParte = (sector_size / t + 2);
+            dim3 mergeSegmentGridSize( largoSeparadoresPorParte, sector_qty);
+            dim3 mergeSegmentBlockSize (t*2, 1);
+            mergeSegmentUsingSeparators<<<mergeSegmentGridSize, mergeSegmentBlockSize>>>(separators_a_gpu, separators_b_gpu, src_gpu, dst_gpu, sector_size/2);
 
         }
 
     }
 
     // 4 - Copy result to CPU
-    CUDA_CHK( cudaMemcpy(src_cpu, src_gpu, size, cudaMemcpyDeviceToHost))
+    CUDA_CHK( cudaMemcpy(src_cpu, dst_gpu, size, cudaMemcpyDeviceToHost))
     CUDA_CHK ( cudaFree(src_gpu) )
 
 }

@@ -67,9 +67,9 @@ void pruebaKernelD2() {
 
 
 int main(){
-    /* initialize random seed: */
-    pruebaKernelD2();
-    return 0;
+    /* initialize random seed */
+    //pruebaKernelD2();
+    //return 0;
 
 
     srand (time(NULL));
