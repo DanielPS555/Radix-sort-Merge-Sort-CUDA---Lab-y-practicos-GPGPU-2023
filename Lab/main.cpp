@@ -10,7 +10,7 @@ int main(){
     /* initialize random seed: */
     srand (time(NULL));
 
-    int length = 1024;
+    int length = 2048;
 
     int * array32 = (int*)malloc(length * sizeof (int));
     for (int i = 0; i < length; ++i) {

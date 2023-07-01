@@ -213,27 +213,28 @@ void orderedJoin(int * src, int largoA, int largoB){
  * Returns 2 arrays with the A and B position of each separator
  */
 __global__
-void separators_kernel(int * in_data, int * out_separators_a, int * out_separators_b, const int sector_size, const int separators_per_sector) {
+void separators_kernel(int * in_data, int * out_separators_a, int * out_separators_b, const int sector_size, const int separators_per_sector, int t) {
     extern __shared__ int separators[];
-
-    const int segment_size = sector_size / separators_per_sector;
-
+    int * separators_global_pos = separators + separators_per_sector;
     // based on the unique id we find the sector_id. The id of the AB sector
     const int sector_id = BLOCK_ID;
     // separator in the sector
     const int separator_id = THREAD_ID;
     const bool is_a = separator_id < (separators_per_sector / 2);
 
-    int pos = sector_id * sector_size + separator_id * segment_size;
+    int segment_limit = sector_id * sector_size + (is_a ? (sector_size / 2) : sector_size);
+
+    int pos = sector_id * sector_size + separator_id % (separators_per_sector / 2) * t + (is_a ? 0 : (sector_size / 2));
     // Last separator gets the last element
-    if (separator_id == separators_per_sector - 1)
-        pos = sector_id * sector_size + sector_size - 1;
+    if (pos >= segment_limit)
+        pos = segment_limit - 1;
 
     int value = -1;
     if (separator_id < separators_per_sector)
     {
         value = in_data[pos];
         separators[separator_id] = value;
+        separators_global_pos[separator_id] = pos;
     }
 
     __syncthreads();
@@ -242,25 +243,33 @@ void separators_kernel(int * in_data, int * out_separators_a, int * out_separato
         return;
 
     // Position in the other half of the separators array
-    int s_opp_position = busquedaPorBiparticion(is_a ? separators + separators_per_sector / 2 : separators, 0, separators_per_sector, value, is_a);
+    int s_offset = is_a ? (separators_per_sector / 2) : 0;
+    int s_opp_position = busquedaPorBiparticion(separators, s_offset, separators_per_sector / 2, value, is_a);
 
-    // Find surrounding indexes
-    int s_opp_position_1 = is_a ? max(separators_per_sector / 2, min(separators_per_sector - 1, s_opp_position - 1)) : max(0, min(separators_per_sector / 2 - 1, s_opp_position - 1));
-    int s_opp_position_2 = is_a ? max(separators_per_sector / 2, min(separators_per_sector - 1, s_opp_position + 1)) : max(0, min(separators_per_sector / 2 - 1, s_opp_position + 1));
+    // if s_opp_position >= separators_per_sector / 2 then the end position is sector_id * sector_size + sector_size - 1
+    // if s_opp_position <= 0 then the start position starts at the beginning of the opposite segment (A or B)
+    int search_start, search_end;
 
-    // Position in in_data of s_opp_position - 1
-    int search_start = sector_id * sector_size + s_opp_position_1 * segment_size;
-    // Position in in_data of s_opp_position + 1
-    int search_end = sector_id * sector_size + s_opp_position_2 * segment_size;
+    if (s_opp_position <= 0) {
+        search_start = sector_id * sector_size + (is_a ? sector_size / 2 : 0);
+    } else {
+        search_start = separators_global_pos[s_opp_position + s_offset - 1];
+    }
+
+    if (s_opp_position >= (separators_per_sector / 2) - 1) {
+        search_end = sector_id * sector_size + (is_a ? sector_size : sector_size / 2  ) - 1;
+    } else {
+        search_end = separators_global_pos[s_opp_position + s_offset + 1];
+    }
 
     // Find opposite position in in_data
-    int opp_position = busquedaPorBiparticion(in_data, search_start, search_end - search_start, value, is_a);
+    int opp_position = busquedaPorBiparticion(in_data, search_start, search_end - search_start, value, is_a) + search_start;
 
     const int pos_a = is_a ? pos : opp_position;
     const int pos_b = is_a ? opp_position : pos;
 
     // Ordered position in separators array out_separators_X
-    int s_position = is_a ? separator_id + s_opp_position : separator_id % (separators_per_sector / 2) + s_opp_position;
+    int s_position = is_a ? (separator_id + s_opp_position) : (separator_id % (separators_per_sector / 2) + s_opp_position);
 
     out_separators_a[sector_id * separators_per_sector + s_position] = pos_a;
     out_separators_b[sector_id * separators_per_sector + s_position] = pos_b;
@@ -352,10 +361,11 @@ void order_array(int * src_cpu, int length) {
             dim3 gridSizeFindSeparators ( sector_qty, 1);
             dim3 blockSizeFindSeparators (separators_per_sector, 1);
 
-            size_t shared_size = separators_per_sector * sector_qty * sizeof(int);
+            size_t shared_size = separators_per_sector * sector_qty * sizeof(int) * 2;
             printf("Shared size: %d\n", shared_size);
+            printf("Separators per sector: %d\n", separators_per_sector);
 
-            separators_kernel<<<gridSizeFindSeparators, blockSizeFindSeparators, shared_size>>>(src_gpu, separators_a_gpu, separators_b_gpu, sector_size, separators_per_sector);
+            separators_kernel<<<gridSizeFindSeparators, blockSizeFindSeparators, shared_size>>>(src_gpu, separators_a_gpu, separators_b_gpu, sector_size, separators_per_sector, t);
             CUDA_CHK(cudaGetLastError())
             CUDA_CHK(cudaDeviceSynchronize())
 
