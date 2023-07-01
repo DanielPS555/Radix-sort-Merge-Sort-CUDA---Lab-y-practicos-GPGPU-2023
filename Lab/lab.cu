@@ -275,6 +275,36 @@ void mergeSegmentUsingSeparators(int * posSeparadoresEnA, int * posSeparadoresEn
     deviceOrderedJoin(src, inicioDeLaParteEnSrc + inicioA, max(0, finA - inicioA), inicioDeLaParteEnSrc + largo + inicioB, max(0, finB - inicioB), dst, inicioDeLaParteEnSrc + inicioA + inicioB,shared );
 }
 
+__global__
+void merge_segments_kernel(int * separators_a, int * separators_b, int * src, int * dst, int sector_size) {
+    __shared__ int shared[512];  // t * 2
+    // Amount of segments per sector
+    int segment_count = gridDim.x;
+    int sector_id = blockIdx.y;
+    int segment_id = blockIdx.x;  // 0-1, 1-2, 2-3, etc...
+
+    int separator_position = sector_id * segment_count + segment_id;
+
+    int start_a = separators_a[separator_position];
+    int start_b = separators_b[separator_position];
+
+    int sector_offset = sector_id * sector_size;
+
+    // Repeat last element for last segment
+    int end_a, end_b;
+    if (segment_id == segment_count - 1) {
+        end_a = sector_offset + sector_size / 2;
+        end_b = sector_offset + sector_size;
+    } else {
+        end_a = separators_a[separator_position + 1];
+        end_b = separators_b[separator_position + 1];
+    }
+
+    int dst_pos = start_a + start_b - sector_offset - sector_size / 2;
+
+    deviceOrderedJoin(src, start_a, max(0, end_a - start_a), start_b, max(0, end_b - start_b), dst, dst_pos, shared);
+}
+
 #define THREAD_ID threadIdx.x + threadIdx.y * blockDim.x
 #define BLOCK_ID  blockIdx.x  + blockIdx.y * gridDim.x
 #define BLOCK_DIM blockDim.x  * blockDim.y
@@ -286,7 +316,7 @@ void mergeSegmentUsingSeparators(int * posSeparadoresEnA, int * posSeparadoresEn
  * Returns 2 arrays with the A and B position of each separator
  */
 __global__
-void separators_kernel(int * in_data, int * out_separators_a, int * out_separators_b, const int sector_size, const int separators_per_sector, int t) {
+void separators_kernel(int * in_data, int * out_separators_a, int * out_separators_b, const int sector_size, const int separators_per_sector, int t, int in_data_size) {
     extern __shared__ int separators[];
     int * separators_global_pos = separators + separators_per_sector;
     // based on the unique id we find the sector_id. The id of the AB sector
@@ -295,7 +325,7 @@ void separators_kernel(int * in_data, int * out_separators_a, int * out_separato
     const int separator_id = THREAD_ID;
     const bool is_a = separator_id < (separators_per_sector / 2);
 
-    int segment_limit = sector_id * sector_size + (is_a ? (sector_size / 2) : sector_size);
+    int segment_limit = min(sector_id * sector_size + (is_a ? (sector_size / 2) : sector_size), in_data_size);
 
     int pos = sector_id * sector_size + separator_id % (separators_per_sector / 2) * t + (is_a ? 0 : (sector_size / 2));
     // Last separator gets the last element
@@ -330,7 +360,7 @@ void separators_kernel(int * in_data, int * out_separators_a, int * out_separato
     }
 
     if (s_opp_position >= (separators_per_sector / 2) - 1) {
-        search_end = sector_id * sector_size + (is_a ? sector_size : sector_size / 2  ) - 1;
+        search_end = min(sector_id * sector_size + (is_a ? sector_size : sector_size / 2  ) - 1, in_data_size - 1);
     } else {
         search_end = separators_global_pos[s_opp_position + s_offset + 1];
     }
@@ -347,18 +377,6 @@ void separators_kernel(int * in_data, int * out_separators_a, int * out_separato
     out_separators_a[sector_id * separators_per_sector + s_position] = pos_a;
     out_separators_b[sector_id * separators_per_sector + s_position] = pos_b;
 }
-
-/**
- * One thread per separator.
- * Read each separator
- * Each block reads a sector
- * Returns 2 arrays with the A and B position of each separator
- */
-__global__
-void separators_merge_kernel(int * in_data, int * in_separators_a, int * in_separators_b, const int sector_size, const int separators_per_sector) {
-
-}
-
 
 #define MINIMUM_BLOCK_SIZE 32 // This is the minimum block size for all separator operations
 void order_array(int * src_cpu, int length) {
@@ -413,22 +431,36 @@ void order_array(int * src_cpu, int length) {
     // 3 - Merge sort on sectors bigger than a block
     if (blockSize < length) {
 
-        printf("Start merge sort with block size %d\n", blockSize);
-
-
         // Each A and B starts with the size of the block
         int sector_size = blockSize;  // Should start at 1024
         int t = blockSize / 2;
+
+        int swapped = false;
 
         // TODO: Por ahora asumimos que el tamaño de size es divisible por 512. Luego se deberan tratar casos donde el B final sea menor a sector_size / 2
         while (sector_size < length) {
             // 3.1 - Find separators
 
-            printf("Start find separators with sector size %d\n", sector_size);
+            // debug shit
+            {
+                printf("\nData before sort with sector size %d\n", sector_size);
+                int * data_cpu_debug = (int *) malloc(length * sizeof (int));
+
+                CUDA_CHK( cudaMemcpy(data_cpu_debug, src_gpu, length * sizeof (int), cudaMemcpyDeviceToHost))
+
+                for (int i = 0; i < length; ++i) {
+                    if(i % 32 == 0)
+                        printf("\n");
+                    printf("%d,", data_cpu_debug[i]);
+                }
+                printf("\n");
+
+
+            }
 
             sector_size *= 2;
 
-            int sector_qty = length / sector_size;
+            int sector_qty = (length + sector_size - 1) / sector_size;
             int separators_per_sector = 2*(1 + ((sector_size / 2) + t - 1)/t);
 
             int separators_count = sector_qty * separators_per_sector;
@@ -437,10 +469,12 @@ void order_array(int * src_cpu, int length) {
             dim3 blockSizeFindSeparators (separators_per_sector, 1);
 
             size_t shared_size = separators_per_sector * sector_qty * sizeof(int) * 2;
-            printf("Shared size: %d\n", shared_size);
+            printf("Sector size: %d\n", sector_size);
+            printf("Sector Qty: %d\n", sector_qty);
             printf("Separators per sector: %d\n", separators_per_sector);
+            printf("Shared size: %d\n", shared_size);
 
-            separators_kernel<<<gridSizeFindSeparators, blockSizeFindSeparators, shared_size>>>(src_gpu, separators_a_gpu, separators_b_gpu, sector_size, separators_per_sector, t);
+            separators_kernel<<<gridSizeFindSeparators, blockSizeFindSeparators, shared_size>>>(src_gpu, separators_a_gpu, separators_b_gpu, sector_size, separators_per_sector, t, length);
             CUDA_CHK(cudaGetLastError())
             CUDA_CHK(cudaDeviceSynchronize())
 
@@ -469,19 +503,32 @@ void order_array(int * src_cpu, int length) {
             }
 
             // 3.2 - Merge sort between separators
+            dim3 mergeSegmentGridSize(separators_per_sector, sector_qty);
+            dim3 mergeSegmentBlockSize(t * 2, 1);
 
-            int largoSeparadoresPorParte = (sector_size / t + 2);
-            dim3 mergeSegmentGridSize( largoSeparadoresPorParte, sector_qty);
-            dim3 mergeSegmentBlockSize (t*2, 1);
-            mergeSegmentUsingSeparators<<<mergeSegmentGridSize, mergeSegmentBlockSize>>>(separators_a_gpu, separators_b_gpu, src_gpu, dst_gpu, sector_size/2);
+            // void merge_segments_kernel(int * separators_a, int * separators_b, int * src, int * dst, int sector_size) {
+
+
+            //mergeSegmentUsingSeparators<<<mergeSegmentGridSize, mergeSegmentBlockSize>>>(separators_a_gpu, separators_b_gpu, src_gpu, dst_gpu, sector_size / 2);
+
+            merge_segments_kernel<<<mergeSegmentGridSize, mergeSegmentBlockSize>>>(separators_a_gpu, separators_b_gpu, src_gpu, dst_gpu, sector_size);
+            CUDA_CHK(cudaGetLastError())
+            CUDA_CHK(cudaDeviceSynchronize())
+            printf("Was succesfull at size %d\n", sector_size);
+
+            int * aux = src_gpu;
+            src_gpu = dst_gpu;
+            dst_gpu = aux;
+            swapped = !swapped;
 
         }
 
     }
 
     // 4 - Copy result to CPU
-    CUDA_CHK( cudaMemcpy(src_cpu, dst_gpu, size, cudaMemcpyDeviceToHost))
+    CUDA_CHK( cudaMemcpy(src_cpu, src_gpu, size, cudaMemcpyDeviceToHost))
     CUDA_CHK ( cudaFree(src_gpu) )
+    CUDA_CHK ( cudaFree(dst_gpu) )
 
 }
 

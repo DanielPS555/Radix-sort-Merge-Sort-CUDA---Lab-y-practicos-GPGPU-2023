@@ -74,11 +74,11 @@ int main(){
 
     srand (time(NULL));
 
-    int length = 2048;
+    int length = 2048 * 16;
 
     int * array32 = (int*)malloc(length * sizeof (int));
     for (int i = 0; i < length; ++i) {
-        int x_rand = rand() % 90;
+        int x_rand = rand() % 100;
         array32[i] = x_rand;
     }
     printf("Original");
