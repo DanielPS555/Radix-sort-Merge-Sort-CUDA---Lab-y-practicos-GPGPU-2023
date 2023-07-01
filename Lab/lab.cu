@@ -400,7 +400,6 @@ void order_array(int * src_cpu, int length) {
     CUDA_CHK( cudaMemcpy(src_gpu, src_cpu, size, cudaMemcpyHostToDevice))
 
     // 1 - Radix sort
-    printf("Start Radix sort\n");
 
     dim3 gridSizeRadixSort ( length / 32, 1);
     dim3 blockSizeRadixSort (32, 1);
@@ -409,13 +408,10 @@ void order_array(int * src_cpu, int length) {
     CUDA_CHK(cudaGetLastError())
     CUDA_CHK(cudaDeviceSynchronize())
 
-    printf("End Radix sort\n");
-
     // 2 - Merge sort on sectors smaller than a block
-    int blockSize = 64; //32*2;
-    while (blockSize <= min(512, length)){
-        printf("Start orderedJoin with block size %d\n", blockSize);
 
+    int blockSize = 64; // 32 * 2;
+    while (blockSize <= min(512, length)){
         dim3 gridSizeOrderedJoin ( length / blockSize, 1);
         dim3 blockSizeOrderedJoin (blockSize, 1);
 
@@ -429,6 +425,7 @@ void order_array(int * src_cpu, int length) {
     blockSize /= 2;
 
     // 3 - Merge sort on sectors bigger than a block
+
     if (blockSize < length) {
 
         // Each A and B starts with the size of the block
@@ -437,26 +434,9 @@ void order_array(int * src_cpu, int length) {
 
         int swapped = false;
 
-        // TODO: Por ahora asumimos que el tamaño de size es divisible por 512. Luego se deberan tratar casos donde el B final sea menor a sector_size / 2
         while (sector_size < length) {
+
             // 3.1 - Find separators
-
-            // debug shit
-            {
-                printf("\nData before sort with sector size %d\n", sector_size);
-                int * data_cpu_debug = (int *) malloc(length * sizeof (int));
-
-                CUDA_CHK( cudaMemcpy(data_cpu_debug, src_gpu, length * sizeof (int), cudaMemcpyDeviceToHost))
-
-                for (int i = 0; i < length; ++i) {
-                    if(i % 32 == 0)
-                        printf("\n");
-                    printf("%d,", data_cpu_debug[i]);
-                }
-                printf("\n");
-
-
-            }
 
             sector_size *= 2;
 
@@ -469,67 +449,35 @@ void order_array(int * src_cpu, int length) {
             dim3 blockSizeFindSeparators (separators_per_sector, 1);
 
             size_t shared_size = separators_per_sector * sector_qty * sizeof(int) * 2;
-            printf("Sector size: %d\n", sector_size);
-            printf("Sector Qty: %d\n", sector_qty);
-            printf("Separators per sector: %d\n", separators_per_sector);
-            printf("Shared size: %d\n", shared_size);
 
             separators_kernel<<<gridSizeFindSeparators, blockSizeFindSeparators, shared_size>>>(src_gpu, separators_a_gpu, separators_b_gpu, sector_size, separators_per_sector, t, length);
             CUDA_CHK(cudaGetLastError())
             CUDA_CHK(cudaDeviceSynchronize())
 
-            // Debug print separators_a and separators_b
-            {
-                int * separators_a_cpu = (int *) malloc(separators_count * sizeof(int));
-                int * separators_b_cpu = (int *) malloc(separators_count * sizeof(int));
-
-                CUDA_CHK( cudaMemcpy(separators_a_cpu, separators_a_gpu, separators_count * sizeof(int), cudaMemcpyDeviceToHost))
-                CUDA_CHK( cudaMemcpy(separators_b_cpu, separators_b_gpu, separators_count * sizeof(int), cudaMemcpyDeviceToHost))
-
-                printf("Separators A:\n");
-                for (int i = 0; i < separators_count; i++) {
-                    printf("%d ", separators_a_cpu[i]);
-                }
-                printf("\n");
-
-                printf("Separators B:\n");
-                for (int i = 0; i < separators_count; i++) {
-                    printf("%d ", separators_b_cpu[i]);
-                }
-                printf("\n");
-
-                free(separators_a_cpu);
-                free(separators_b_cpu);
-            }
-
             // 3.2 - Merge sort between separators
+
             dim3 mergeSegmentGridSize(separators_per_sector, sector_qty);
             dim3 mergeSegmentBlockSize(t * 2, 1);
-
-            // void merge_segments_kernel(int * separators_a, int * separators_b, int * src, int * dst, int sector_size) {
-
-
-            //mergeSegmentUsingSeparators<<<mergeSegmentGridSize, mergeSegmentBlockSize>>>(separators_a_gpu, separators_b_gpu, src_gpu, dst_gpu, sector_size / 2);
 
             merge_segments_kernel<<<mergeSegmentGridSize, mergeSegmentBlockSize>>>(separators_a_gpu, separators_b_gpu, src_gpu, dst_gpu, sector_size);
             CUDA_CHK(cudaGetLastError())
             CUDA_CHK(cudaDeviceSynchronize())
-            printf("Was succesfull at size %d\n", sector_size);
 
             int * aux = src_gpu;
             src_gpu = dst_gpu;
             dst_gpu = aux;
             swapped = !swapped;
-
         }
 
     }
 
     // 4 - Copy result to CPU
+
     CUDA_CHK( cudaMemcpy(src_cpu, src_gpu, size, cudaMemcpyDeviceToHost))
     CUDA_CHK ( cudaFree(src_gpu) )
     CUDA_CHK ( cudaFree(dst_gpu) )
-
+    CUDA_CHK ( cudaFree(separators_a_gpu) )
+    CUDA_CHK ( cudaFree(separators_b_gpu) )
 }
 
 
