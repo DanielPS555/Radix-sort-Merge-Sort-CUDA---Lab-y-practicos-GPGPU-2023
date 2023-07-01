@@ -1,6 +1,7 @@
 #include <stdio.h>
 
 #include "include/lab.h"
+#include <thrust/sort.h>
 
 #define WARP_SIZE 32
 #define FULL_MASK 0xffffffff
@@ -122,6 +123,7 @@ void radix_sort_kernel(int * src) {
     src[idInArray] = currentValue;
 }
 
+
 /**
  * Dado un array ordenado desde [posicionInicio, posicionInicio + size ], devuelve la posicion en la que deberia ser insertado objetoBuscado
  * Nota: si previoAIguales == true, este devuelve la posicion de forma que objetoBuscado sea insertado antes que los iguales,
@@ -136,6 +138,8 @@ void radix_sort_kernel(int * src) {
  */
 __device__
 int busquedaPorBiparticion(int * array, int posicionInicio, int size, int objetoBuscado, bool previoAIguales){
+
+    if(size <= 0) return 0;
 
     int final = posicionInicio + size - 1;
     int inicio = posicionInicio;
@@ -166,6 +170,56 @@ int busquedaPorBiparticion(int * array, int posicionInicio, int size, int objeto
 
 
 /**
+ * Se encarga de convinar el array
+ * @param arrayA
+ * @param largoA
+ * @param arrayB
+ * @param largoB
+ * @param arraySalida
+ * @param sharedToUse
+ */
+__device__
+void deviceOrderedJoin(int * src, int posicionLecturaA, int largoA, int posicionLecturaB, int largoB, int * arraySalida, int posicionSalida, int * sharedToUse){
+
+    //En una primera instancia voy a destinar los primeros "largoPorSegmento" threads para ordenar los elementos de A, los demas para ordenar los de B.
+    // ToDo utilizar la idea del ej 2 practico 4 para hacer que la lectura sea coalesed
+
+    bool soyDeB;
+    int idMiArray;
+    int valor;
+    if(threadIdx.x < largoA + largoB){
+        soyDeB = threadIdx.x >= largoA;
+        idMiArray = soyDeB ? threadIdx.x - largoA: threadIdx.x; //Es la posicion dentro de A o B respectivamente (sin contar el offset de posicionLecturaA o posicionLecturaB)
+        valor = soyDeB ? src[posicionLecturaB + idMiArray] : src[posicionLecturaA + idMiArray];
+        sharedToUse[threadIdx.x] = valor;
+    }
+    __syncthreads();
+
+    int posicionEnElOtroArray;
+    if(threadIdx.x < largoA + largoB) {
+        // Nota: Aqui hay que tener un cuidado adicional, ¿Que pasa si en la misma posiicon i de A y B tenemos que r(a_i, B) = r(b_i, A)?
+        //         La solucion que encontramos es hacer que ese j no sea igual discriminando entre el array A y el B, dando la presetncia a A, mas detalle a continuacion:
+        //         Notar que si a_i < b_i, entonces r(a_i, B) < r(b_i,B) = i = r(a_i, A) < r(b_i, A) (analogo para b_i < a_i), entonces aqui no hay problema.
+        //         Pero lo mismo no ocurre si a_i = b_i = h, ya que dependiendo de la politica de la busqueda, tanto el a_i como el b_i tendrian como r(a_i, B) = r(b_i, A) = posicion al inicio (o final) de la rafaga de h
+        //         Es por eso que se propone que la politica de busqueda de r(a_i, B) y r(b_i, A) sea diferente
+        //         De forma tal que los elementos de A se "inserten" previo a todos los valores iguales en B, mientras que para los de B buscaremos su posicion de forma tal que sea luego de los iguales en A
+        //         Esto ultimo es lo que representa el ultimo parametro de el metodo busquedaPorBiparticion
+        posicionEnElOtroArray = busquedaPorBiparticion(sharedToUse, soyDeB ? 0 : largoA, soyDeB ? largoA : largoB, valor, !soyDeB);
+    }
+
+    __syncthreads();
+    if(threadIdx.x < largoA + largoB) {
+        sharedToUse[idMiArray + posicionEnElOtroArray] = valor; //Escribo mi valor en la nueva posicion
+    }
+
+    __syncthreads();
+    if(threadIdx.x < largoA + largoB) {
+        arraySalida[posicionSalida + threadIdx.x] = sharedToUse[threadIdx.x]; //Escritura en memoria global coaleced si posicionSalida es multiplo de 32
+    }
+}
+
+
+/**
  * En base a dos array ordenados CONSECUTIVOS de largo largoA y largoB respectivamente
  * escribe en "array" el nuevo array ordenado producto de ordenar los dos anteriores
  * @param array
@@ -173,33 +227,52 @@ int busquedaPorBiparticion(int * array, int posicionInicio, int size, int objeto
  * @param largoB
  */
 __global__
-void orderedJoin(int * src, int largoA, int largoB){
-    extern __shared__ int shared[]; //Size = largoA + largob . Se almacena de forma compartida la informacion de los dos arrays a juntar
-    //Voy a destinar los primeros "largoA" threads para ordenar los elementos de A, los demas para ordenar los de B
-    bool soyDeB = threadIdx.x >= largoA;
-    int idEnArray = soyDeB ? threadIdx.x - largoA: threadIdx.x; //Es la posicion dentro de A o B respectivamente
-    int valor = src[ blockIdx.x * blockDim.x + threadIdx.x ]; //Todo analizar viabilidad de hacer consulta coalleced
-    shared[threadIdx.x] = valor;
+void orderedJoin(int * src, int largoPorSegmento){
+    extern __shared__ int shared[]; //Size = 2*largoPorSegmento . Se almacena de forma compartida la informacion de los dos arrays a juntar
+    int posInicioBloque = blockIdx.x * blockDim.x;
+    deviceOrderedJoin(src, posInicioBloque, largoPorSegmento, posInicioBloque + largoPorSegmento, largoPorSegmento, src, posInicioBloque, shared);
+}
 
-    __syncthreads();
+/**
+ * Combina las secuencias delimitadas por posSeparadoresEnA y posSeparadoresEnB de A y B respectivamente,
+ * las escribe en su respectiva posicion en el array dst
+ *
+ * Precondiciones:
+ * - A y B, se encuentan consecutivos en src,
+ * - length(A) = length(B) = largo
+ * - A comienza en 2 * largo * blockIdx.y
+ * - length(src) = length(dst)
+ * - La grilla de bloques es dimencional, el dimencion y identifica al A y B a comvinar, mientras que la dimencion x identifica al par de separadores (segmento) que hay que juntar
+ *
+ * @param posSeparadoresEnA
+ * @param posSeparadoresEnB
+ * @param src
+ * @param dst
+ * @param largo
+ */
+__global__
+void mergeSegmentUsingSeparators(int * posSeparadoresEnA, int * posSeparadoresEnB, int * src , int * dst, int largo){
+    __shared__ int shared[512]; //Max que puede ocupar A + B
+    int numeroDeSegmentosPorParte = gridDim.x; // La dimencion en X nos da el numero de segmentos
 
-    // Nota: Aqui hay que tener un cuidado adicional, ¿Que pasa si en la misma posiicon i de A y B tenemos que r(a_i, B) = r(b_i, A)?
-    //         La solucion que encontramos es hacer que ese j no sea igual discriminando entre el array A y el B, dando la presetncia a A, mas detalle a continuacion:
-    //         Notar que si a_i < b_i, entonces r(a_i, B) < r(b_i,B) = i = r(a_i, A) < r(b_i, A) (analogo para b_i < a_i), entonces aqui no hay problema.
-    //         Pero lo mismo no ocurre si a_i = b_i = h, ya que dependiendo de la politica de la busqueda, tanto el a_i como el b_i tendrian como r(a_i, B) = r(b_i, A) = posicion al inicio (o final) de la rafaga de h
-    //         Es por eso que se propone que la politica de busqueda de r(a_i, B) y r(b_i, A) sea diferente
-    //         De forma tal que los elementos de A se "inserten" previo a todos los valores iguales en B, mientras que para los de B buscaremos su posicion de forma tal que sea luego de los iguales en A
-    //         Esto ultimo es lo que representa el ultimo parametro de el metodo busquedaPorBiparticion
+    int idParte = blockIdx.y;
+    int idSegmento = blockIdx.x;
 
-    int posicionEnElOtroArray = busquedaPorBiparticion(shared, soyDeB ? 0 : largoA, soyDeB ? largoA : largoB, valor, !soyDeB);
+    int inicioA = posSeparadoresEnA[idParte * numeroDeSegmentosPorParte + idSegmento];
+    int inicioB = posSeparadoresEnB[idParte * numeroDeSegmentosPorParte + idSegmento];
 
-    __syncthreads();
+    int finA;
+    int finB;
+    if(idSegmento == numeroDeSegmentosPorParte - 1){ // Si soy el ultimo segmento de una parte
+        finA = largo;
+        finB = largo;
+    } else {
+        finA = posSeparadoresEnA[idParte * numeroDeSegmentosPorParte + idSegmento + 1];
+        finB = posSeparadoresEnB[idParte * numeroDeSegmentosPorParte + idSegmento + 1];
+    }
 
-    shared[idEnArray + posicionEnElOtroArray] = valor; //Escribo mi valor en la nueva posicion
-
-    __syncthreads();
-
-    src[ blockIdx.x * blockDim.x + threadIdx.x ] = shared[threadIdx.x];
+    int inicioDeLaParteEnSrc = idParte * 2 * largo;
+    deviceOrderedJoin(src, inicioDeLaParteEnSrc + inicioA, max(0, finA - inicioA), inicioDeLaParteEnSrc + largo + inicioB, max(0, finB - inicioB), dst, inicioDeLaParteEnSrc + inicioA + inicioB,shared );
 }
 
 #define THREAD_ID threadIdx.x + threadIdx.y * blockDim.x
@@ -438,7 +511,7 @@ void test_with_block_under_256(int * srcCpu, int length){
         dim3 gridSizeOrdenerJoin ( length / blockSize, 1);
         dim3 blockSizeOrdererJoin (blockSize, 1);
 
-        orderedJoin<<<gridSizeOrdenerJoin, blockSizeOrdererJoin, blockSize*sizeof(int)>>>(srcGpu, blockSize/2, blockSize/2);
+        orderedJoin<<<gridSizeOrdenerJoin, blockSizeOrdererJoin, blockSize*sizeof(int)>>>(srcGpu, blockSize/2);
         CUDA_CHK(cudaGetLastError())
         CUDA_CHK(cudaDeviceSynchronize())
 
@@ -447,82 +520,8 @@ void test_with_block_under_256(int * srcCpu, int length){
 
     CUDA_CHK( cudaMemcpy(srcCpu, srcGpu, size, cudaMemcpyDeviceToHost))
     CUDA_CHK ( cudaFree(srcGpu) )
+
 }
-/*
-void test_secuence_reading (int * srcCpu, int length){
-
-    int blockSize = 256; // se ejecuta test_with_block_under_256 antes
-
-    int * srcGpu = NULL;
-
-    size_t size = length * sizeof (int);
-    CUDA_CHK( cudaMalloc ((void **)& srcGpu , size ) )
-
-    CUDA_CHK( cudaMemcpy(srcGpu, srcCpu, size, cudaMemcpyHostToDevice))
-
-    if (blockSize <= length) {
-
-        int segment_count = length / (256 / 2); // How many segments of 256/2 are there
-
-        // so the seprators are always going to be the same, only their vales are going to change
-        int* gpu_segment_values;
-        CUDA_CHK( cudaMalloc ((void **)& gpu_segment_values , segment_count * sizeof(int) ) )
-        int* cpu_segment_values = (int*) malloc(segment_count * sizeof(int));
-
-        // read separators
-        // size of each A + B
-        int sector_size = blockSize * 2;
-        int t = blockSize / 2;
-
-
-        //while (segment_size <= length) {
-
-
-        // int section_qty = length / (blockSize * 2); // How many ab groups are there
-
-        //dim3 gridSize(section_qty, 1);
-        dim3 dimBlockSize(32, 32);
-        dim3 gridSize((32 * 32 + segment_count - 1) / segment_count, 1);
-        int separators_per_sector = sector_size / t;
-
-        read_separators<<<gridSize, dimBlockSize>>>(srcGpu, length, gpu_segment_values, segment_count, sector_size, separators_per_sector);
-
-        CUDA_CHK(cudaGetLastError())
-        CUDA_CHK(cudaDeviceSynchronize())
-
-        // foreach sector
-        for (int i = 0; i < segment_count; i++) {
-            printf("%d ", cpu_segment_values[i]);
-        }
-
-
-        CUDA_CHK( cudaMemcpy(cpu_segment_values, gpu_segment_values, segment_count * sizeof(int), cudaMemcpyDeviceToHost) )
-        for (int i = 0; i < segment_count; i++) {
-            printf("%d ", cpu_segment_values[i]);
-        }
-
-
-
-        // encuentro separadores
-        // Sa + Sb
-        // sector_size *= 2;
-
-        //}
-
-
-
-        printf("\n");
-
-        free(cpu_segment_values);
-        CUDA_CHK( cudaFree(gpu_segment_values) )
-
-    }
-
-    CUDA_CHK( cudaMemcpy(srcCpu, srcGpu, size, cudaMemcpyDeviceToHost))
-    CUDA_CHK ( cudaFree(srcGpu) )
-}
-
-*/
 
 
 void test_radix_sort(int * srcCpu){
@@ -544,4 +543,48 @@ void test_radix_sort(int * srcCpu){
 
     CUDA_CHK( cudaMemcpy(srcCpu, srcGpu, size, cudaMemcpyDeviceToHost))
     CUDA_CHK ( cudaFree(srcGpu) )
+}
+
+void test_merge_segment_using_separators(int * array, int largoPorParte, int * sa, int * sb, int maximoSoporadoPorMergeSort,int numeroPartes){
+    int * srcGpu = NULL;
+    int * dstGpu = NULL;
+
+    int * separadoresAGpu = NULL;
+    int * separadoresBGpu = NULL;
+
+    int largoSeparadoresPorParte = (largoPorParte / (maximoSoporadoPorMergeSort / 2) + 2);
+
+    printf("El numero de separadores es = %d \n" , largoSeparadoresPorParte * numeroPartes);
+
+    //allocate
+    size_t size = largoPorParte * numeroPartes * sizeof (int);
+    size_t sizeSeparadores = largoSeparadoresPorParte * numeroPartes * sizeof(int);
+
+    CUDA_CHK( cudaMalloc ((void **)& srcGpu , size ) )
+    CUDA_CHK( cudaMalloc ((void **)& dstGpu , size ) )
+
+    CUDA_CHK( cudaMalloc ((void **)& separadoresAGpu , sizeSeparadores ) )
+    CUDA_CHK( cudaMalloc ((void **)& separadoresBGpu , sizeSeparadores ) )
+
+    CUDA_CHK( cudaMemcpy(srcGpu, array, size, cudaMemcpyHostToDevice))
+    CUDA_CHK( cudaMemcpy(separadoresAGpu, sa, sizeSeparadores, cudaMemcpyHostToDevice))
+    CUDA_CHK( cudaMemcpy(separadoresBGpu, sb, sizeSeparadores, cudaMemcpyHostToDevice))
+
+    dim3 gridSize ( largoSeparadoresPorParte, numeroPartes);
+    dim3 blockSize (maximoSoporadoPorMergeSort, 1);
+
+    mergeSegmentUsingSeparators<<<gridSize, blockSize>>>(separadoresAGpu, separadoresBGpu, srcGpu, dstGpu, largoPorParte/2);
+    CUDA_CHK(cudaGetLastError())
+    CUDA_CHK(cudaDeviceSynchronize())
+
+    CUDA_CHK( cudaMemcpy(array, dstGpu, size, cudaMemcpyDeviceToHost))
+    CUDA_CHK ( cudaFree(srcGpu) )
+    CUDA_CHK ( cudaFree(dstGpu) )
+    CUDA_CHK ( cudaFree(separadoresAGpu) )
+    CUDA_CHK ( cudaFree(separadoresBGpu) )
+}
+
+
+void order_with_trust(int * src, int length){
+    thrust::sort(src, src + length);
 }
