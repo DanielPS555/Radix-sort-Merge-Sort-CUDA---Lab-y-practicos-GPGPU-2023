@@ -75,10 +75,9 @@ void radix_sort_kernel(int * src) {
 
         currentValue = swap[tie + lane];
 
-        mask <<= 1; //Muevo la mascara
+        mask <<= 1; // Muevo la mascara
 
         valorThreadPrevio = __shfl_up_sync(FULL_MASK, currentValue, 1);
-
 
         if (lane == 0)
             valorThreadPrevio = currentValue - 1;
