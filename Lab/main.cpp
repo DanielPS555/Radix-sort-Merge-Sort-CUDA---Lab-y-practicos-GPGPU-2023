@@ -2,6 +2,9 @@
 #include "include/lab.h"
 
 #include <time.h>
+#include <algorithm>
+
+
 
 
 int * create_random_data(int length) {
@@ -24,9 +27,11 @@ int main() {
     for (int size = 256; size <= 65536; size *= 2) {
         int * our_data = create_random_data(size);
         int * trust_data = create_random_data(size);
+        int * cpu_data = create_random_data(size);
 
         MS( order_array(our_data, size), our_time )
         MS( order_with_trust(trust_data, size), timeTrust)
+        MS( std::sort(cpu_data, cpu_data + size), cpu_time)
 
         free(our_data);
         free(trust_data);
@@ -35,12 +40,15 @@ int main() {
     for (int size = 256; size <= 65536; size *= 2) {
         int * our_data = create_random_data(size);
         int * trust_data = create_random_data(size);
+        int * cpu_data = create_random_data(size);
 
         MS( order_array(our_data, size), our_time )
         MS( order_with_trust(trust_data, size), timeTrust)
+        MS( std::sort(cpu_data, cpu_data + size), cpu_time)
 
         fprintf(output, "%d,%f,Our\n", size, our_time);
         fprintf(output, "%d,%f,Trust\n", size, timeTrust);
+        fprintf(output, "%d,%f,CPU\n", size, cpu_time);
 
         free(our_data);
         free(trust_data);
