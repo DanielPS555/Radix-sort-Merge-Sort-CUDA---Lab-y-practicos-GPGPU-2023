@@ -196,7 +196,7 @@ void orderedJoin(int * src, int largoPorSegmento){
     deviceOrderedJoin(src, posInicioBloque, largoPorSegmento, posInicioBloque + largoPorSegmento, largoPorSegmento, src, posInicioBloque, shared);
 }
 
-#define THREAD_ID threadIdx.x + threadIdx.y * blockDim.x
+
 #define BLOCK_ID  blockIdx.x  + blockIdx.y * gridDim.x
 #define BLOCK_DIM blockDim.x  * blockDim.y
 
@@ -211,9 +211,9 @@ void separators_kernel(int * in_data, int * out_separators_a, int * out_separato
     extern __shared__ int separators[];
     int * separators_global_pos = separators + separators_per_sector;
     // based on the unique id we find the sector_id. The id of the AB sector
-    const int sector_id = BLOCK_ID;
+    const int sector_id = BLOCK_ID * blockDim.y + threadIdx.y;
     // separator in the sector
-    const int separator_id = THREAD_ID;
+    const int separator_id = threadIdx.x;
     const bool is_a = separator_id < (separators_per_sector / 2);
 
     int segment_limit = min(sector_id * sector_size + (is_a ? (sector_size / 2) : sector_size), in_data_size);
@@ -366,8 +366,9 @@ void order_array(int * src_cpu, int length) {
 
             int separators_count = sector_qty * separators_per_sector;
 
-            dim3 gridSizeFindSeparators ( sector_qty, 1);
-            dim3 blockSizeFindSeparators (separators_per_sector, 1);
+            int sectors_per_block = (separators_per_sector + 31) / 32;
+            dim3 blockSizeFindSeparators (separators_per_sector, sectors_per_block);
+            dim3 gridSizeFindSeparators ( (sector_qty + sectors_per_block - 1) / sectors_per_block, 1);
 
             size_t shared_size = separators_per_sector * sector_qty * sizeof(int) * 2;
 
