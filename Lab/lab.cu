@@ -207,11 +207,11 @@ void orderedJoin(int * src, int largoPorSegmento){
  * Returns 2 arrays with the A and B position of each separator
  */
 __global__
-void separators_kernel(int * in_data, int * out_separators_a, int * out_separators_b, const int sector_size, const int separators_per_sector, int t, int in_data_size) {
+void separators_kernel(int * in_data, int * out_separators_a, int * out_separators_b, const int sector_size, const int sector_count, const int separators_per_sector, int t, int in_data_size) {
     extern __shared__ int separators[];
-    int * separators_global_pos = separators + separators_per_sector;
+    int * separators_global_pos = separators + separators_per_sector * blockDim.y;
     // based on the unique id we find the sector_id. The id of the AB sector
-    const int sector_id = BLOCK_ID * blockDim.y + threadIdx.y;
+    const int sector_id = blockIdx.x * blockDim.y + threadIdx.y;
     // separator in the sector
     const int separator_id = threadIdx.x;
     const bool is_a = separator_id < (separators_per_sector / 2);
@@ -224,20 +224,23 @@ void separators_kernel(int * in_data, int * out_separators_a, int * out_separato
         pos = segment_limit - 1;
 
     int value = -1;
-    if (separator_id < separators_per_sector)
+    if (separator_id < separators_per_sector && sector_id < sector_count)
     {
         value = in_data[pos];
-        separators[separator_id] = value;
-        separators_global_pos[separator_id] = pos;
+        separators[separator_id + separators_per_sector * threadIdx.y] = value;
+        separators_global_pos[separator_id + separators_per_sector * threadIdx.y] = pos;
     }
 
     __syncthreads();
+
+    if (sector_id >= sector_count)
+        return;
 
     if (separator_id >= separators_per_sector)
         return;
 
     // Position in the other half of the separators array
-    int s_offset = is_a ? (separators_per_sector / 2) : 0;
+    int s_offset = threadIdx.y * separators_per_sector + (is_a ? (separators_per_sector / 2) : 0);
     int s_opp_position = busquedaPorBiparticion(separators, s_offset, separators_per_sector / 2, value, is_a);
 
     // if s_opp_position >= separators_per_sector / 2 then the end position is sector_id * sector_size + sector_size - 1
@@ -361,18 +364,18 @@ void order_array(int * src_cpu, int length) {
 
             sector_size *= 2;
 
-            int sector_qty = (length + sector_size - 1) / sector_size;
-            int separators_per_sector = 2*(1 + ((sector_size / 2) + t - 1)/t);
+            int sector_qty = (length + sector_size - 1) / sector_size; // 64
+            int separators_per_sector = 2*(1 + ((sector_size / 2) + t - 1)/t); // 8
 
-            int separators_count = sector_qty * separators_per_sector;
+            int separators_count = sector_qty * separators_per_sector; // 8
 
-            int sectors_per_block = (separators_per_sector + 31) / 32;
+            int sectors_per_block = (64 + separators_per_sector - 1) / separators_per_sector; // 4
             dim3 blockSizeFindSeparators (separators_per_sector, sectors_per_block);
             dim3 gridSizeFindSeparators ( (sector_qty + sectors_per_block - 1) / sectors_per_block, 1);
 
-            size_t shared_size = separators_per_sector * sector_qty * sizeof(int) * 2;
+            size_t shared_size = separators_per_sector * sectors_per_block * sizeof(int) * 2;
 
-            separators_kernel<<<gridSizeFindSeparators, blockSizeFindSeparators, shared_size>>>(src_gpu, separators_a_gpu, separators_b_gpu, sector_size, separators_per_sector, t, length);
+            separators_kernel<<<gridSizeFindSeparators, blockSizeFindSeparators, shared_size>>>(src_gpu, separators_a_gpu, separators_b_gpu, sector_size, sector_qty, separators_per_sector, t, length);
             CUDA_CHK(cudaGetLastError())
             CUDA_CHK(cudaDeviceSynchronize())
 
@@ -402,6 +405,6 @@ void order_array(int * src_cpu, int length) {
     CUDA_CHK ( cudaFree(separators_b_gpu) )
 }
 
-void order_with_trust(int * src, int length){
+void order_with_trust(int * src, int length) {
     thrust::sort(src, src + length);
 }
